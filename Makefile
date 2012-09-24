@@ -7,7 +7,7 @@ CC = gcc
 CFLAGS	= -Wall -O2
 LDFLAGS = -lm
 
-OBJS	= main.o
+OBJS	= main.o math.o world.o mesh_data.o
 
 all : 	linux
 

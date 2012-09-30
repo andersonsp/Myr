@@ -33,36 +33,26 @@
 
 //
 
-typedef struct  { float x, y, z; } Vector;
-typedef struct  { Vector p, r, u, b; } Camera;
-
+typedef struct { float x, y, z;  } Vec;
+typedef struct { short s, t;     } Vec2s;
+typedef struct { float s, t;     } Vec2;
+typedef struct { float x,y,z,w;  } Vec4;
+typedef struct { Vec p, r, u, b; } Camera;
+typedef struct { float x,y,z,w;  } Quat;
+typedef struct { Quat q, d;      } DualQuat;
 
 #define OCTREE_SIZE 10
-typedef struct Grid Grid;
-typedef struct Cell Cell;
+
+typedef struct _Model Model;
 
 typedef struct {
-    Vector p, n;
-} Vertex;
+    GLuint id, bpp;
+    GLint width, height;
+} Texture;
 
 typedef struct {
-    float r, g, b, a;
-    Vertex *v1, *v2, *v3;
-} Triangle;
-
-typedef struct {
-    int vn;
-    Vertex **v;
-
-    int tn;
-    Triangle **t;
-
-    float rr; // squared bounding sphere radius, with position as center
-    // Grid *grid; // An octree to speed up finding of triangles for collision.
-} Mesh;
-
-typedef struct {
-    Mesh *mesh;
+    Model *model;
+    float rr; //squared radius
     Camera camera;
 
     int hits;
@@ -76,8 +66,8 @@ typedef struct {
 
 typedef struct {
     Camera camera;
-    Vector hitpoint;
-    Vector footpoint;
+    Vec hitpoint;
+    Vec footpoint;
     Object *hit;
 
     float health;
@@ -85,11 +75,11 @@ typedef struct {
 
 typedef struct {
     Object *object;
-    Vector velocity;
+    Vec velocity;
     int tick;
     int hitpoints;
 
-    Vector avoid;
+    Vec avoid;
     int avoid_time;
 
     float speed;
@@ -97,66 +87,49 @@ typedef struct {
 } Monster;
 
 
-
 //math.c
-Vector vector_add(Vector a, Vector b);
-Vector vector_sub(Vector a, Vector b);
-Vector vector_scale(Vector a, float s);
-float vector_dot(Vector a, Vector b);
-Vector vector_cross(Vector a, Vector b);
-float vector_len(Vector a);
-Vector vector_normalize(Vector a);
+Vec vec_add( Vec a, Vec b );
+Vec vec_sub( Vec a, Vec b );
+Vec vec_scale( Vec a, float s );
+float vec_dot( Vec a, Vec b );
+Vec vec_cross( Vec a, Vec b );
+float vec_len( Vec a );
+Vec vec_normalize( Vec a );
 
-Vector vector_transform(Vector a, Camera *camera);
-Vector vector_backtransform(Vector a, Camera *camera);
-Vector vector_rotate(Vector a, Vector b, float angle);
+Vec vec_transform( Vec a, Camera *camera );
+Vec vec_backtransform( Vec a, Camera *camera );
+Vec vec_rotate( Vec a, Vec b, float angle );
 
-int ray_intersects_triangle(Vector pos, Vector dir, Vector v0, Vector v1, Vector v2, Vector *result);
-int line_intersects_triangle(Vector pos1, Vector pos2, Vector v0, Vector v1, Vector v2, Vector *result);
+int ray_intersects_triangle( Vec pos, Vec dir, Vec v0, Vec v1, Vec v2, Vec *result );
+int line_intersects_triangle( Vec pos1, Vec pos2, Vec v0, Vec v1, Vec v2, Vec *result );
 
 void camera_turn(Camera *camera, float a);
 void camera_pitch(Camera *camera, float a);
 void camera_yaw(Camera *camera, float a);
 void camera_roll(Camera *camera, float a);
 
-//mesh_data.c
-Mesh *landscape_mesh(void);
-Mesh *monster_mesh(void);
-Mesh *monster2_mesh(void);
+// assets.c
+int texture_load( Texture *tex, const char* filename );
+
+// model.c
+Model* model_load( const char *filename );
+void model_destroy( Model* mdl );
+void model_draw( Model* mdl, float frame );
+int model_collision( Model *mdl, Vec pos, Vec dir, Vec *result );
+float model_calculate_bounding_sphere( Model *mdl );
 
 // world.c
-Vertex *vertex_new(float x, float y, float z, float nx, float ny, float nz);
-Triangle *triangle_new(Vertex *v1, Vertex *v2, Vertex *v3, float r, float g, float b, float a);
 World *world_new(void);
 void world_add_object(World *self, Object *object);
-Object *object_new(Vector pos, Mesh *mesh);
-void triangle_draw(Triangle *self);
-void mesh_draw(Mesh *self);
-void object_draw(Object *self);
-void world_draw(World *self, Camera *camera);
-int mesh_collision(Mesh *self, Vector pos, Vector dir, Vector *result);
-int object_collision(Object *o, Vector pos, Vector dir, Vector *result);
-Object *world_collision(World *self, Vector pos, Vector dir, Vector *result);
-void mesh_calculate_bounding_sphere(Mesh *self);
-// void mesh_create_grid(Mesh *self);
-void apply_camera(Camera *camera);
-void apply_orientation(Camera *camera);
+Object *object_new( Vec pos, Model *mdl );
+void object_draw( Object *self );
+void world_draw( World *self, Camera *camera );
+int object_collision( Object *o, Vec pos, Vec dir, Vec *result );
+Object *world_collision( World *self, Vec pos, Vec dir, Vec *result );
+void apply_camera( Camera *camera );
+void apply_orientation( Camera *camera );
 
-// // octree.c
-// int in_cell(Cell *self, Vector pos);
-// int cell_has_triangle(Cell *self, Triangle *t);
-// void cell_add_triangle(Cell *self, Triangle *t);
-// void cell_subdivide(Grid *grid, Cell *self);
-// Cell *cell_new(Grid *grid, Cell *parent, float x1, float x2, float y1, float y2, float z1, float z2);
-// Grid *grid_new(Mesh *mesh, float s);
-// Cell *cell_get_cell(Cell *self, Vector pos);
-// Cell *grid_get_cell(Grid *self, Vector pos);
-// void cell_draw_debug_colored(Cell *self);
-// void cell_draw_debug(Cell *self);
-// int grid_collision_recurse(Grid *self, Cell *cell, Vector pos, Vector dir, Vector *result);
-// int grid_collision(Grid *self, Vector pos, Vector dir, Vector *result);
-// void grid_draw_debug(Grid *self, Vector pos, Vector dir);
-
+// octree.c
 
 
 // ===============================================================

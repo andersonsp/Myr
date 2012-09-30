@@ -12,9 +12,9 @@ extern int debug_disable_grid;
 extern int stats_drawn_objects;
 
 World *world;
-Mesh *landscape_meshdata, *monster_meshdata, *monster2_meshdata;
+Model *level_mdl;
 Player *player;
-Monster *monster[MONSTER_COUNT];
+// Monster *monster[MONSTER_COUNT];
 Object *landscape;
 
 int boss;
@@ -22,7 +22,7 @@ int boss;
 int gamestate = 0;
 int counter = 0;
 
-int monsters_alive;
+// int monsters_alive;
 
 
 
@@ -56,14 +56,14 @@ void player_ai(Player *self) {
 
     float f = 0.1;
 
-    Vector b = vector_scale(camera->b, kz * f);
-    camera->p = vector_add(camera->p, b);
+    Vec b = vec_scale(camera->b, kz * f);
+    camera->p = vec_add(camera->p, b);
 
-    Vector r = vector_scale(camera->r, kx * f);
-    camera->p = vector_add(camera->p, r);
+    Vec r = vec_scale(camera->r, kx * f);
+    camera->p = vec_add(camera->p, r);
 
-    Vector u = vector_scale(camera->u, ky * f);
-    camera->p = vector_add(camera->p, u);
+    Vec u = vec_scale(camera->u, ky * f);
+    camera->p = vec_add(camera->p, u);
 
     float x = xm * 0.1 * G_PI / 180.0;
     camera_turn(camera, x);
@@ -72,73 +72,43 @@ void player_ai(Player *self) {
     camera_pitch(camera, y);
 
     Object *col;
-    Vector pos;
-    Vector dir[] = {camera->r, camera->u, camera->b,
-        vector_scale(camera->r, -1.0), vector_scale(camera->u, -1.0),
-        vector_scale(camera->b, -1.0)};
-    /* Push away from nearby geometry. */
-    for (i = 0; i < 6; i++) {
+    Vec pos;
+    Vec dir[] = {camera->r, camera->u, camera->b,
+        vec_scale(camera->r, -1.0), vec_scale(camera->u, -1.0),
+        vec_scale(camera->b, -1.0)};
+    // Push away from nearby geometry.
+    for( i = 0; i < 6; i++ ) {
         col = world_collision(world, camera->p, dir[i], &pos);
-        if (col) {
-            Vector diff = vector_sub(pos, camera->p);
-            if (vector_dot(diff, diff) < 1) {
-                camera->p = vector_add( pos, vector_scale(dir[i], -1) );
+        if( col ) {
+            Vec diff = vec_sub(pos, camera->p);
+            if( vec_dot(diff, diff) < 1 ) {
+                camera->p = vec_add( pos, vec_scale(dir[i], -1) );
             }
         }
     }
 
-    /* Ground collision. */
+    // Ground collision.
     // TODO: Jumping
-    col = world_collision(world, camera->p, (Vector){0, -1, 0}, &self->footpoint);
+    col = world_collision(world, camera->p, (Vec){0, -1, 0}, &self->footpoint);
     if (col) {
-        Vector diff = vector_sub(self->footpoint, camera->p);
-        if ( vector_dot(diff, diff) < 9.0 ) {
-            camera->p = vector_add(self->footpoint, (Vector){0, 2, 0});
-        } else { /* fall down */
+        Vec diff = vec_sub(self->footpoint, camera->p);
+        if ( vec_dot(diff, diff) < 9.0 ) {
+            camera->p = vec_add(self->footpoint, (Vec){0, 2, 0});
+        } else { // fall down
             camera->p.y -= 0.5;
         }
-    } else {/* uh oh - fell out of level */
+    } else {// uh oh - fell out of level
         if (camera->p.y > -100) camera->p.y--;
     }
 
-    Vector forward = vector_scale(camera->b, -1);
+    Vec forward = vec_scale(camera->b, -1);
     self->hit = world_collision(world, camera->p, forward, &self->hitpoint);
-
-//    if (self->shot_pause)
-//        self->shot_pause--;
-//    else
-//    {
-//        if (land_mouse_b())
-//        {
-//            self->shot_pause = 50;
-//            if (self->hit)
-//            {
-//                self->hit->hits++;
-//
-//                Vector rgb;
-//                if (self->hit == landscape)
-//                {
-//                    float c = land_rnd(0, 1);
-//                    rgb = (Vector){c, c, c};
-//                }
-//                else
-//                {
-//                    float c = land_rnd(0, 0.5);
-//                    rgb = (Vector){1, c, c};
-//                }
-//
-//                for (i = 0; i < 11; i++)
-//                {
-//                    particle_add(self->hitpoint, rgb);
-//                }
-//            }
-//        }
-//    }
 }
 
 
-
-
+//
+// SYSTEM
+//
 
 void g_configure( GConfig *conf ) {
     // width, height
@@ -149,7 +119,7 @@ void g_configure( GConfig *conf ) {
 
     conf->width = 800;
     conf->height = 600;
-    conf->flags = GC_IGNORE_KEYREPEAT;
+    conf->flags = GC_IGNORE_KEYREPEAT | GC_HIDE_CURSOR;
     conf->gl_version = 21;
     conf->data = NULL;
     conf->title = strdup("Land");
@@ -160,6 +130,10 @@ void g_initialize( int width, int height, void *data ) {
 
     glClearColor(0, 0.5, 0.5, 0);
     glClearDepth(1);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CW);
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -172,22 +146,11 @@ void g_initialize( int width, int height, void *data ) {
 
 
     world = world_new();
+    level_mdl = model_load( "level_concept.iqm" );
+    if( !level_mdl ) g_fatal_error( "couldn't load level_concept.iqm model" );
 
-    landscape_meshdata = landscape_mesh();
-    monster_meshdata = monster_mesh();
-    monster2_meshdata = monster2_mesh();
-
-    landscape = object_new((Vector){0, 0, 0}, landscape_meshdata);
-    world_add_object(world, landscape);
-
-    // int i;
-    // for (i = 0; i < MONSTER_COUNT; i++) {
-    //     float x = g_rand(-10, 10);
-    //     float z = g_rand(-10, 10);
-    //     Object *ob = object_new((Vector){x, 25, z}, monster_meshdata);
-    //     monster[i] = monster_new(ob);
-    //     world_add_object(world, ob);
-    // }
+    landscape = object_new( (Vec){0, 0, 0}, level_mdl );
+    world_add_object( world, landscape );
 
     player = player_new();
 }
@@ -202,41 +165,36 @@ void g_render( void *data ) {
     glEnable(GL_CULL_FACE);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+    glColor4f(1, 1, 1, 1);
 
     glLoadIdentity();
     apply_camera(camera);
 
-    {
-        GLfloat ambient[] = { 0, 0, 0, 1.0 };
-        //GLfloat diffuse[] = { 1, 0, 0, 1.0 };
-        GLfloat emission[] = { 0.0, 0.0, 0.0, 1.0 };
-        GLfloat specular[] = { 0, 0, 0, 0 };
 
-        glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
-        //glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, diffuse);
-        glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emission);
-        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, specular);
-        glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 1);
+    GLfloat ambient[] = { 0, 0, 0, 1.0 };
+    GLfloat emission[] = { 0.0, 0.0, 0.0, 1.0 };
+    GLfloat specular[] = { 0, 0, 0, 0 };
 
-        glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
-    }
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emission);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, specular);
+    glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 1);
+
+    glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+
 
     glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE);
     glLightModeli(GL_LIGHT_MODEL_COLOR_CONTROL, GL_SINGLE_COLOR);
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
 
-    {
-        GLfloat lightpos[] = { 5, 5, 5, 1 };
-        GLfloat ambient[] = { 0, 0, 0, 1.0 };
-        GLfloat diffuse[] = { 1, 1, 1, 1.0 };
-        GLfloat specular[] = { 0, 0, 0, 0 };
+    GLfloat lightpos[] = { 5, 5, 5, 1 };
+    GLfloat diffuse[] = { 1, 1, 1, 1.0 };
 
-        glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
-        glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
-        glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
-    }
+    glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
+    glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
+
 
     stats_drawn_objects = 0;
     world_draw(world, &player->camera);
@@ -244,17 +202,17 @@ void g_render( void *data ) {
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
 
-    if (player->hit)
-    {
-        Vector hitpoint = player->hitpoint;
-        Vector vl = vector_add(hitpoint, vector_scale(camera->r, 0.9));
-        Vector vr = vector_sub(hitpoint, vector_scale(camera->r, 0.9));
-        Vector vu = vector_add(hitpoint, vector_scale(camera->u, 0.9));
-        Vector vd = vector_sub(hitpoint, vector_scale(camera->u, 0.9));
-        Vector vl2 = vector_add(hitpoint, vector_scale(camera->r, 0.4));
-        Vector vr2 = vector_sub(hitpoint, vector_scale(camera->r, 0.4));
-        Vector vu2 = vector_add(hitpoint, vector_scale(camera->u, 0.4));
-        Vector vd2 = vector_sub(hitpoint, vector_scale(camera->u, 0.4));
+    // render crosshair
+    if( player->hit ) {
+        Vec hitpoint = player->hitpoint;
+        Vec vl = vec_add(hitpoint, vec_scale(camera->r, 0.9));
+        Vec vr = vec_sub(hitpoint, vec_scale(camera->r, 0.9));
+        Vec vu = vec_add(hitpoint, vec_scale(camera->u, 0.9));
+        Vec vd = vec_sub(hitpoint, vec_scale(camera->u, 0.9));
+        Vec vl2 = vec_add(hitpoint, vec_scale(camera->r, 0.4));
+        Vec vr2 = vec_sub(hitpoint, vec_scale(camera->r, 0.4));
+        Vec vu2 = vec_add(hitpoint, vec_scale(camera->u, 0.4));
+        Vec vd2 = vec_sub(hitpoint, vec_scale(camera->u, 0.4));
 
         glBegin(GL_LINES);
         glColor4f(0, 1, 0, 1);
@@ -277,35 +235,13 @@ void g_render( void *data ) {
 void g_update( unsigned int milliseconds, void *data ) {
     if( counter < 300 ) player_ai(player);
 
-    if (gamestate == 0) {
+    if( gamestate == 0 ) {
         if (player->camera.p.y < -90) player->health = 0;
         if (player->health <= 0) gamestate = 1;
     } else {
         counter++;
     }
 
-    // monsters_alive = 0;
-    // int i;
-    // for (i = 0; i < MONSTER_COUNT; i++) {
-    //     monster_ai(monster[i]);
-    //     if (monster[i]->object->hits < monster[i]->hitpoints) {
-    //         monsters_alive++;
-    //     }
-    // }
-
-    // if( monsters_alive == 0 ) {
-    //     if( !boss ) {
-    //         monster[0]->object->camera.p = (Vector){0, 100, -200};
-    //         monster[0]->object->mesh = monster2_meshdata;
-    //         monster[0]->object->hits = 0;
-    //         monster[0]->hitpoints = 111;
-    //         monster[0]->finished = 0;
-    //         monster[0]->speed = 1;
-    //         boss++;
-    //     } else {
-    //         gamestate = 2;
-    //     }
-    // }
 }
 
 int g_handle_event( GEvent *event, void *data ) {

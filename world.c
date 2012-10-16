@@ -92,12 +92,6 @@ Object *world_collision(World *self, Vec pos, Vec dir, Vec *result) {
     return col;
 }
 
-
-
-// void mesh_create_grid(Mesh *self) {
-//     self->grid = grid_new(self, OCTREE_SIZE);
-// }
-
 void apply_camera(Camera *camera) {
     GLfloat matrix[16];
     matrix[0] = camera->r.x;

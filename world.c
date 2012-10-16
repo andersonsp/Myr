@@ -37,53 +37,53 @@ void object_draw( Object *self ) {
 void world_draw(World *self, Camera *camera) {
     int i;
     for( i = 0; i < self->on; i++ ) {
+        // Vec a, c;
         Object *o = self->o[i];
-        Vec a = vec_sub(o->camera.p, camera->p);
-        Vec c = vec_cross(a, camera->b);
-        float sidesquare = vec_dot(c, c);
-        float distsquare = vec_dot(a, a);
-        float dot = vec_dot(camera->b, a);
-        if( dot > 0 && distsquare > o->rr ) continue;
-        if( sidesquare > distsquare + o->rr ) continue;
+        // vec_sub( &a, &o->camera.p, &camera->p );
+        // vec_cross( &c, &a, &camera->b );
+        // float sidesquare = vec_dot( &c, &c );
+        // float distsquare = vec_dot( &a, &a );
+        // float dot = vec_dot( &camera->b, &a );
+        // if( dot > 0 && distsquare > o->rr ) continue;
+        // if( sidesquare > distsquare + o->rr ) continue;
 
         object_draw( o );
     }
 }
 
-int object_collision(Object *o, Vec pos, Vec dir, Vec *result) {
-    Vec a = vec_sub(o->camera.p, pos);
-    Vec c = vec_cross(a, dir);
-    float dd = vec_dot(c, c);
+int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result ) {
+    Vec a, c, dirpos, relpos, reldir, relresult;
+    vec_sub( &a, &o->camera.p, pos );
+    vec_cross( &c, &a, dir );
+    float dd = vec_dot( &c, &c );
     if( dd < o->rr ) {
-        Vec dirpos = vec_add( pos, dir );
-        Vec relpos = vec_transform( pos, &o->camera );
-        dirpos = vec_transform( dirpos, &o->camera );
-        Vec reldir = vec_sub( dirpos, relpos );
-        Vec relresult;
+        vec_add( &dirpos, pos, dir );
+        vec_transform( &relpos, pos, &o->camera );
+        vec_transform( &dirpos, &dirpos, &o->camera );
+        vec_sub( &reldir, &dirpos, &relpos );
         int r;
         // if (debug_disable_grid)
-            r = model_collision( o->model, relpos, reldir, &relresult );
+            r = model_collision( o->model, &relpos, &reldir, &relresult );
         // else r = grid_collision(o->mesh->grid, relpos, reldir, &relresult);
         if( r ) {
-            Vec where = vec_backtransform( relresult, &o->camera );
-            *result = where;
+            vec_backtransform( result, &relresult, &o->camera );
             return 1;
         }
     }
     return 0;
 }
 
-Object *world_collision(World *self, Vec pos, Vec dir, Vec *result) {
+Object *world_collision(World *self, Vec* pos, Vec* dir, Vec *result) {
     int i;
     float min = 10000000000;
     Object *col = NULL;
     for (i = 0; i < self->on; i++) {
         Object *o = self->o[i];
-        Vec temp;
-        if( object_collision(o, pos, dir, &temp) ) {
-            float d = vec_len(vec_sub(temp, pos));
+        Vec tmp1, tmp2;
+        if( object_collision(o, pos, dir, &tmp1) ) {
+            float d = vec_len( vec_sub( &tmp2, &tmp1, pos) );
             if( d < min ) {
-                *result = temp;
+                *result = tmp1;
                 col = o;
                 min = d;
             }

@@ -1,154 +1,166 @@
 #include "land.h"
 
-
-Vec vec_add( Vec a, Vec b ) {
-    return (Vec){a.x + b.x, a.y + b.y, a.z + b.z};
+Vec* vec_add( Vec* r, Vec* a, Vec* b ) {
+    r->x = a->x + b->x;
+    r->y = a->y + b->y;
+    r->z = a->z + b->z;
+    return r;
 }
 
-Vec vec_sub( Vec a, Vec b ) {
-    return (Vec){a.x - b.x, a.y - b.y, a.z - b.z};
+Vec* vec_sub( Vec* r, Vec* a, Vec* b ) {
+    r->x = a->x - b->x;
+    r->y = a->y - b->y;
+    r->z = a->z - b->z;
+    return r;
 }
 
-Vec vec_scale( Vec a, float s ) {
-    return (Vec){a.x * s, a.y * s, a.z * s};
+Vec* vec_scale( Vec* r, Vec* a, float s ) {
+    r->x = a->x * s;
+    r->y = a->y * s;
+    r->z = a->z * s;
+    return r;
 }
 
-float vec_dot( Vec a, Vec b ) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
+Vec* vec_cross( Vec* r, Vec* a, Vec* b ) {
+    r->x = a->y * b->z - a->z * b->y;
+    r->y = a->z * b->x - a->x * b->z;
+    r->z = a->x * b->y - a->y * b->x;
+    return r;
 }
 
-Vec vec_cross( Vec a, Vec b ) {
-    Vec result;
-    result.x = a.y * b.z - b.y * a.z;
-    result.y = a.z * b.x - b.z * a.x;
-    result.z = a.x * b.y - b.x * a.y;
-    return result;
+Vec* vec_normalize( Vec* r, Vec* a ) {
+    float mag = vec_len(a);
+    r->x /= mag;
+    r->y /= mag;
+    r->z /= mag;
+    return r;
 }
 
-float vec_len( Vec a ) {
-    return sqrtf(vec_dot(a, a));
+float vec_dot( Vec* a, Vec* b ) {
+    return a->x*b->x + a->y*b->y + a->z*b->z;
 }
 
-Vec vec_normalize(Vec a){
-    return vec_scale(a, 1.0 / vec_len(a));
+float vec_len( Vec* a ) {
+    return (float) sqrt( a->x*a->x + a->y*a->y + a->z*a->z );
 }
 
 // Transform from world into camera coordinates.
-Vec vec_transform(Vec a, Camera *camera) {
-    a = vec_sub(a, camera->p);
-    return (Vec) {
-        vec_dot(a, camera->r),
-        vec_dot(a, camera->u),
-        vec_dot(a, camera->b),
-    };
+Vec* vec_transform( Vec* r, Vec* a, Camera* camera ) {
+    Vec u;
+    vec_sub( &u, a, &camera->p );
+    r->x = vec_dot( &u, &camera->r);
+    r->y = vec_dot( &u, &camera->u);
+    r->z = vec_dot( &u, &camera->b);
+    return r;
 }
 
 // Transform from camera into world coordinates.
-Vec vec_backtransform(Vec a, Camera *camera) {
+Vec* vec_backtransform( Vec* r, Vec* a, Camera* camera ) {
     Vec x, y, z;
 
-    x = vec_scale(camera->r, a.x);
-    y = vec_scale(camera->u, a.y);
-    z = vec_scale(camera->b, a.z);
+    vec_scale( &x, &camera->r, a->x );
+    vec_scale( &y, &camera->u, a->y );
+    vec_scale( &z, &camera->b, a->z );
 
-    return vec_add(vec_add(vec_add(x, y), z), camera->p);
+    return vec_add( r, vec_add(r, vec_add(r, &x, &y), &z), &camera->p );
 }
 
 // Rotate a around b by angle, store in result.
-Vec vec_rotate(Vec a, Vec b, float angle) {
+Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle ) {
     float c = cosf(angle);
     float s = sinf(angle);
 
-    Vec row[3] = {
-        vec_scale(b, b.x * (1 - c)),
-        vec_scale(b, b.y * (1 - c)),
-        vec_scale(b, b.z * (1 - c))
-    };
-    row[0].x += c;
-    row[0].y += b.z * s;
-    row[0].z -= b.y * s;
+    Vec m1, m2, m3;
+    vec_scale( &m1, b, b->x * (1 - c) );
+    vec_scale( &m2, b, b->y * (1 - c) );
+    vec_scale( &m3, b, b->z * (1 - c) );
 
-    row[1].x -= b.z * s;
-    row[1].y += c;
-    row[1].z += b.x * s;
+    m1.x += c;
+    m1.y += b->z * s;
+    m1.z -= b->y * s;
 
-    row[2].x += b.y * s;
-    row[2].y -= b.x * s;
-    row[2].z += c;
+    m2.x -= b->z * s;
+    m2.y += c;
+    m2.z += b->x * s;
 
-    return (Vec) {
-        vec_dot(a, row[0]),
-        vec_dot(a, row[1]),
-        vec_dot(a, row[2])
-    };
+    m3.x += b->y * s;
+    m3.y -= b->x * s;
+    m3.z += c;
+
+    r->x = vec_dot( a, &m1 );
+    r->x = vec_dot( a, &m2 );
+    r->x = vec_dot( a, &m3 );
+
+    return r;
 }
-
 
  // * Point on ray:
  // *     pos + t * dir, t in R
  // * Point in triangle:
  // *     (1 - u - v) * v0 + u * v1 + v * v2, u >= 0, v >= 0, u + v <= 1
+int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result ) {
+    Vec eu, ev, cv, vt, cu;
+    vec_sub( &eu, v1, v0 );
+    vec_sub( &ev, v2, v0 );
 
-int ray_intersects_triangle(Vec pos, Vec dir, Vec v0, Vec v1, Vec v2, Vec *result) {
-    Vec eu = vec_sub(v1, v0);
-    Vec ev = vec_sub(v2, v0);
-
-    Vec cv = vec_cross(dir, ev);
-    float det = vec_dot(eu, cv);
+    vec_cross( &cv, dir, &ev );
+    float det = vec_dot( &eu, &cv );
 
     // cull if in triangle plane, of hit backface
-    if (det <= 0) return 0;
+    if( det <= 0 ) return 0;
 
-    Vec vt = vec_sub(pos, v0);
+    vec_sub( &vt, pos, v0 );
 
-    float u = vec_dot(vt, cv);
-    if (u < 0 || u > det) return 0;
+    float u = vec_dot( &vt, &cv );
+    if( u < 0 || u > det ) return 0;
 
-    Vec cu = vec_cross(vt, eu);
+    vec_cross( &cu, &vt, &eu );
 
-    float v = vec_dot(dir, cu);
-    if (v < 0 || u + v > det) return 0;
+    float v = vec_dot( dir, &cu );
+    if( v < 0 || u+v > det ) return 0;
 
-    float t = vec_dot(ev, cu);
-    if (t < 0) return 0;
+    float t = vec_dot( &ev, &cu );
+    if( t < 0 ) return 0;
 
     t /= det;
 
-    *result = vec_add(pos, vec_scale(dir, t));
+    vec_add( result, pos, vec_scale(result, dir, t) );
     return 1;
 }
 
-int line_intersects_triangle(Vec pos1, Vec pos2, Vec v0, Vec v1, Vec v2, Vec *result) {
-    Vec d = vec_sub(pos2, pos1);
-    Vec dn = vec_normalize(d);
-    if( ray_intersects_triangle(pos1, dn, v0, v1, v2, result) ) {
-        Vec s = vec_sub(*result, pos1);
-        float ss = vec_dot(s, s);
-        float dd = vec_dot(d, d);
-        if (ss <= dd) return 1;
+int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result ) {
+    Vec d, dn, s;
+    vec_sub( &d, p2, p1 );
+    vec_normalize( &dn, &d );
+    if( ray_intersects_triangle(p1, &dn, v0, v1, v2, result) ) {
+        vec_sub( &s, result, p1 );
+        float ss = vec_dot( &s, &s );
+        float dd = vec_dot( &d, &d );
+        if( ss <= dd ) return 1;
     }
     return 0;
 }
 
-void camera_turn(Camera *camera, float a) {
-    camera->r = vec_rotate(camera->r, (Vec){0, 1, 0}, a);
-    camera->r = vec_normalize(camera->r);
+void camera_turn( Camera *camera, float a ) {
+    Vec axis = {0, 1, 0};
+    vec_rotate( &camera->r, &camera->r, &axis, a );
+    vec_normalize( &camera->r, &camera->r );
 
-    camera->b = vec_cross(camera->r, camera->u);
-    camera->b = vec_normalize(camera->b);
+    vec_cross( &camera->b, &camera->r, &camera->u );
+    vec_normalize( &camera->b, &camera->b );
 }
 
-void camera_pitch(Camera *camera, float a) {
-    camera->b = vec_rotate(camera->b, camera->r, a);
-    camera->u = vec_cross(camera->b, camera->r);
+void camera_pitch( Camera *camera, float a ) {
+    vec_rotate( &camera->b, &camera->b, &camera->r, a );
+    vec_cross( &camera->u, &camera->b, &camera->r );
 }
 
-void camera_yaw(Camera *camera, float a) {
-    camera->r = vec_rotate(camera->r, camera->u, a);
-    camera->b = vec_cross(camera->r, camera->u);
+void camera_yaw( Camera *camera, float a ) {
+    vec_rotate( &camera->r, &camera->r, &camera->u, a );
+    vec_cross( &camera->b, &camera->r, &camera->u );
 }
 
-void camera_roll(Camera *camera, float a) {
-    camera->u = vec_rotate(camera->u, camera->b, a);
-    camera->r = vec_cross(camera->u, camera->b);
+void camera_roll( Camera *camera, float a ) {
+    vec_rotate( &camera->u, &camera->u, &camera->b, a );
+    vec_cross( &camera->r, &camera->u, &camera->b );
 }

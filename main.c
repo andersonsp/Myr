@@ -56,14 +56,10 @@ void player_ai(Player *self) {
 
     float f = 0.1;
 
-    Vec b = vec_scale(camera->b, kz * f);
-    camera->p = vec_add(camera->p, b);
-
-    Vec r = vec_scale(camera->r, kx * f);
-    camera->p = vec_add(camera->p, r);
-
-    Vec u = vec_scale(camera->u, ky * f);
-    camera->p = vec_add(camera->p, u);
+    Vec b, r, u;
+    vec_add( &camera->p, &camera->p, vec_scale(&b, &camera->b, kz * f) );
+    vec_add( &camera->p, &camera->p, vec_scale(&r, &camera->r, kx * f) );
+    vec_add( &camera->p, &camera->p, vec_scale(&u, &camera->u, ky * f) );
 
     float x = xm * 0.1 * G_PI / 180.0;
     camera_turn(camera, x);
@@ -71,38 +67,42 @@ void player_ai(Player *self) {
     float y = ym * 0.1 * G_PI / 180.0;
     camera_pitch(camera, y);
 
-    Object *col;
-    Vec pos;
-    Vec dir[] = {camera->r, camera->u, camera->b,
-        vec_scale(camera->r, -1.0), vec_scale(camera->u, -1.0),
-        vec_scale(camera->b, -1.0)};
-    // Push away from nearby geometry.
-    for( i = 0; i < 6; i++ ) {
-        col = world_collision(world, camera->p, dir[i], &pos);
-        if( col ) {
-            Vec diff = vec_sub(pos, camera->p);
-            if( vec_dot(diff, diff) < 1 ) {
-                camera->p = vec_add( pos, vec_scale(dir[i], -1) );
-            }
-        }
-    }
+    // Object *col;
+    // Vec pos;
+    // Vec dir[6] = {camera->r, camera->u, camera->b};
+    // vec_scale( &dir[3], &camera->r, -1.0 );
+    // vec_scale( &dir[3], &camera->u, -1.0 );
+    // vec_scale( &dir[3], &camera->b, -1.0 );
+    // // Push away from nearby geometry.
+    // for( i = 0; i < 6; i++ ) {
+    //     col = world_collision( world, &camera->p, &dir[i], &pos );
+    //     if( col ) {
+    //         Vec diff, s_dir;
+    //         vec_sub( &diff, &pos, &camera->p );
+    //         if( vec_dot(&diff, &diff) < 1 ) {
+    //             vec_add( &camera->p, &pos, vec_scale(&s_dir, &dir[i], -1) );
+    //         }
+    //     }
+    // }
 
-    // Ground collision.
-    // TODO: Jumping
-    col = world_collision(world, camera->p, (Vec){0, -1, 0}, &self->footpoint);
-    if (col) {
-        Vec diff = vec_sub(self->footpoint, camera->p);
-        if ( vec_dot(diff, diff) < 9.0 ) {
-            camera->p = vec_add(self->footpoint, (Vec){0, 2, 0});
-        } else { // fall down
-            camera->p.y -= 0.5;
-        }
-    } else {// uh oh - fell out of level
-        if (camera->p.y > -100) camera->p.y--;
-    }
+    // // Ground collision.
+    // // TODO: Jumping
+    Vec forward, down = {0, -1, 0}, fall_delta = {0, 2, 0};
+    // col = world_collision(world, &camera->p, &down, &self->footpoint);
+    // if( col ) {
+    //     Vec diff;
+    //     vec_sub( &diff, &self->footpoint, &camera->p );
+    //     if ( vec_dot(&diff, &diff) < 9.0 ) {
+    //         vec_add( &camera->p, &self->footpoint, &fall_delta );
+    //     } else { // fall down
+    //         camera->p.y -= 0.5;
+    //     }
+    // } else {// uh oh - fell out of level
+    //     if (camera->p.y > -100) camera->p.y--;
+    // }
 
-    Vec forward = vec_scale(camera->b, -1);
-    self->hit = world_collision(world, camera->p, forward, &self->hitpoint);
+    vec_scale( &forward, &camera->b, -1 );
+    self->hit = world_collision( world, &camera->p, &forward, &self->hitpoint );
 }
 
 
@@ -205,29 +205,29 @@ void g_render( void *data ) {
     // render crosshair
     if( player->hit ) {
         Vec hitpoint = player->hitpoint;
-        Vec vl = vec_add(hitpoint, vec_scale(camera->r, 0.9));
-        Vec vr = vec_sub(hitpoint, vec_scale(camera->r, 0.9));
-        Vec vu = vec_add(hitpoint, vec_scale(camera->u, 0.9));
-        Vec vd = vec_sub(hitpoint, vec_scale(camera->u, 0.9));
-        Vec vl2 = vec_add(hitpoint, vec_scale(camera->r, 0.4));
-        Vec vr2 = vec_sub(hitpoint, vec_scale(camera->r, 0.4));
-        Vec vu2 = vec_add(hitpoint, vec_scale(camera->u, 0.4));
-        Vec vd2 = vec_sub(hitpoint, vec_scale(camera->u, 0.4));
+        Vec vl, vr, vu, vd, vl2, vr2, vu2, vd2;
+        vec_add( &vl, &hitpoint, vec_scale(&vl, &camera->r, 0.9) );
+        vec_sub( &vr, &hitpoint, vec_scale(&vr, &camera->r, 0.9) );
+        vec_add( &vu, &hitpoint, vec_scale(&vu, &camera->u, 0.9) );
+        vec_sub( &vd, &hitpoint, vec_scale(&vd, &camera->u, 0.9) );
+        vec_add( &vl2, &hitpoint, vec_scale(&vl2, &camera->r, 0.4));
+        vec_sub( &vr2, &hitpoint, vec_scale(&vr2, &camera->r, 0.4));
+        vec_add( &vu2, &hitpoint, vec_scale(&vu2, &camera->u, 0.4));
+        vec_sub( &vd2, &hitpoint, vec_scale(&vd2, &camera->u, 0.4));
 
-        glBegin(GL_LINES);
-        glColor4f(0, 1, 0, 1);
-        glVertex3f(vl.x, vl.y, vl.z);
-        glVertex3f(vl2.x, vl2.y, vl2.z);
+        glBegin( GL_LINES );
+        glColor4f( 0, 1, 0, 1 );
+            glVertex3f( vl.x, vl.y, vl.z );
+            glVertex3f( vl2.x, vl2.y, vl2.z );
 
-        glVertex3f(vr.x, vr.y, vr.z);
-        glVertex3f(vr2.x, vr2.y, vr2.z);
+            glVertex3f( vr.x, vr.y, vr.z );
+            glVertex3f( vr2.x, vr2.y, vr2.z );
 
-        glVertex3f(vu.x, vu.y, vu.z);
-        glVertex3f(vu2.x, vu2.y, vu2.z);
+            glVertex3f( vu.x, vu.y, vu.z );
+            glVertex3f( vu2.x, vu2.y, vu2.z );
 
-        glVertex3f(vd.x, vd.y, vd.z);
-        glVertex3f(vd2.x, vd2.y, vd2.z);
-
+            glVertex3f( vd.x, vd.y, vd.z );
+            glVertex3f( vd2.x, vd2.y, vd2.z );
         glEnd();
     }
 }

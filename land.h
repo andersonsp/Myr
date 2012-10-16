@@ -88,20 +88,20 @@ typedef struct {
 
 
 //math.c
-Vec vec_add( Vec a, Vec b );
-Vec vec_sub( Vec a, Vec b );
-Vec vec_scale( Vec a, float s );
-float vec_dot( Vec a, Vec b );
-Vec vec_cross( Vec a, Vec b );
-float vec_len( Vec a );
-Vec vec_normalize( Vec a );
+Vec* vec_add( Vec* r, Vec* a, Vec* b );
+Vec* vec_sub( Vec* r, Vec* a, Vec* b );
+Vec* vec_scale( Vec* r, Vec* a, float s );
+Vec* vec_cross( Vec* r, Vec* a, Vec* b );
+Vec* vec_normalize( Vec* r, Vec* a );
+float vec_dot( Vec* a, Vec* b );
+float vec_len( Vec* a );
 
-Vec vec_transform( Vec a, Camera *camera );
-Vec vec_backtransform( Vec a, Camera *camera );
-Vec vec_rotate( Vec a, Vec b, float angle );
+Vec* vec_transform( Vec* r, Vec* a, Camera* camera );
+Vec* vec_backtransform( Vec* r, Vec* a, Camera* camera );
+Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle );
 
-int ray_intersects_triangle( Vec pos, Vec dir, Vec v0, Vec v1, Vec v2, Vec *result );
-int line_intersects_triangle( Vec pos1, Vec pos2, Vec v0, Vec v1, Vec v2, Vec *result );
+int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result );
+int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result );
 
 void camera_turn(Camera *camera, float a);
 void camera_pitch(Camera *camera, float a);
@@ -115,7 +115,7 @@ int texture_load( Texture *tex, const char* filename );
 Model* model_load( const char *filename );
 void model_destroy( Model* mdl );
 void model_draw( Model* mdl, float frame );
-int model_collision( Model *mdl, Vec pos, Vec dir, Vec *result );
+int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
 // world.c
@@ -124,8 +124,8 @@ void world_add_object(World *self, Object *object);
 Object *object_new( Vec pos, Model *mdl );
 void object_draw( Object *self );
 void world_draw( World *self, Camera *camera );
-int object_collision( Object *o, Vec pos, Vec dir, Vec *result );
-Object *world_collision( World *self, Vec pos, Vec dir, Vec *result );
+int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result );
+Object *world_collision( World *self, Vec* pos, Vec* dir, Vec *result );
 void apply_camera( Camera *camera );
 void apply_orientation( Camera *camera );
 

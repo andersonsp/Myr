@@ -62,44 +62,44 @@ void player_ai(Player *self) {
     vec_add( &camera->p, &camera->p, vec_scale(&u, &camera->u, ky * f) );
 
     float x = xm * 0.1 * G_PI / 180.0;
-    camera_turn(camera, x);
+    camera_turn( camera, x );
 
     float y = ym * 0.1 * G_PI / 180.0;
     camera_pitch(camera, y);
 
-    // Object *col;
-    // Vec pos;
-    // Vec dir[6] = {camera->r, camera->u, camera->b};
-    // vec_scale( &dir[3], &camera->r, -1.0 );
-    // vec_scale( &dir[3], &camera->u, -1.0 );
-    // vec_scale( &dir[3], &camera->b, -1.0 );
-    // // Push away from nearby geometry.
-    // for( i = 0; i < 6; i++ ) {
-    //     col = world_collision( world, &camera->p, &dir[i], &pos );
-    //     if( col ) {
-    //         Vec diff, s_dir;
-    //         vec_sub( &diff, &pos, &camera->p );
-    //         if( vec_dot(&diff, &diff) < 1 ) {
-    //             vec_add( &camera->p, &pos, vec_scale(&s_dir, &dir[i], -1) );
-    //         }
-    //     }
-    // }
+    Object *col;
+    Vec pos;
+    Vec dir[6] = {camera->r, camera->u, camera->b};
+    vec_scale( &dir[3], &camera->r, -1.0 );
+    vec_scale( &dir[3], &camera->u, -1.0 );
+    vec_scale( &dir[3], &camera->b, -1.0 );
+    // Push away from nearby geometry.
+    for( i = 0; i < 6; i++ ) {
+        col = world_collision( world, &camera->p, &dir[i], &pos );
+        if( col ) {
+            Vec diff, s_dir;
+            vec_sub( &diff, &pos, &camera->p );
+            if( vec_dot(&diff, &diff) < 1 ) {
+                vec_add( &camera->p, &pos, vec_scale(&s_dir, &dir[i], -1) );
+            }
+        }
+    }
 
-    // // Ground collision.
-    // // TODO: Jumping
+    // Ground collision.
+    // TODO: Jumping
     Vec forward, down = {0, -1, 0}, fall_delta = {0, 2, 0};
-    // col = world_collision(world, &camera->p, &down, &self->footpoint);
-    // if( col ) {
-    //     Vec diff;
-    //     vec_sub( &diff, &self->footpoint, &camera->p );
-    //     if ( vec_dot(&diff, &diff) < 9.0 ) {
-    //         vec_add( &camera->p, &self->footpoint, &fall_delta );
-    //     } else { // fall down
-    //         camera->p.y -= 0.5;
-    //     }
-    // } else {// uh oh - fell out of level
-    //     if (camera->p.y > -100) camera->p.y--;
-    // }
+    col = world_collision(world, &camera->p, &down, &self->footpoint);
+    if( col ) {
+        Vec diff;
+        vec_sub( &diff, &self->footpoint, &camera->p );
+        if ( vec_dot(&diff, &diff) < 9.0 ) {
+            vec_add( &camera->p, &self->footpoint, &fall_delta );
+        } else { // fall down
+            camera->p.y -= 0.5;
+        }
+    } else {// uh oh - fell out of level
+        if (camera->p.y > -100) camera->p.y--;
+    }
 
     vec_scale( &forward, &camera->b, -1 );
     self->hit = world_collision( world, &camera->p, &forward, &self->hitpoint );
@@ -241,7 +241,6 @@ void g_update( unsigned int milliseconds, void *data ) {
     } else {
         counter++;
     }
-
 }
 
 int g_handle_event( GEvent *event, void *data ) {

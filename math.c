@@ -18,6 +18,7 @@ Vec* vec_scale( Vec* r, Vec* a, float s ) {
     r->x = a->x * s;
     r->y = a->y * s;
     r->z = a->z * s;
+    // g_debug_str( "scale: x=%f y=%f z=%f -- s=%f\n", r->x, r->y, r->z, s );
     return r;
 }
 
@@ -88,8 +89,8 @@ Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle ) {
     m3.z += c;
 
     r->x = vec_dot( a, &m1 );
-    r->x = vec_dot( a, &m2 );
-    r->x = vec_dot( a, &m3 );
+    r->y = vec_dot( a, &m2 );
+    r->z = vec_dot( a, &m3 );
 
     return r;
 }

@@ -37,7 +37,6 @@ typedef struct { float x, y, z;  } Vec;
 typedef struct { short s, t;     } Vec2s;
 typedef struct { float s, t;     } Vec2;
 typedef struct { float x,y,z,w;  } Vec4;
-typedef struct { Vec p, r, u, b; } Camera;
 typedef struct { float x,y,z,w;  } Quat;
 typedef struct { Quat q, d;      } DualQuat;
 
@@ -53,7 +52,8 @@ typedef struct {
 typedef struct {
     Model *model;
     float rr; //squared radius
-    Camera camera;
+    Quat orient;
+    Vec pos;
 
     int hits;
 } Object;
@@ -63,12 +63,10 @@ typedef struct {
     Object **o;
 } World;
 
-
 typedef struct {
-    Camera camera;
-    Vec hitpoint;
-    Vec footpoint;
     Object *hit;
+    Quat orient;
+    Vec pos, hitpoint, footpoint;
 
     float health;
 } Player;
@@ -100,13 +98,13 @@ Vec* vec_transform( Vec* r, Vec* a, Camera* camera );
 Vec* vec_backtransform( Vec* r, Vec* a, Camera* camera );
 Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle );
 
-int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result );
-int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result );
-
+// camera.c
 void camera_turn(Camera *camera, float a);
 void camera_pitch(Camera *camera, float a);
 void camera_yaw(Camera *camera, float a);
 void camera_roll(Camera *camera, float a);
+void camera_apply( Camera *camera );
+void camera_apply_orientation( Camera *camera );
 
 // assets.c
 int texture_load( Texture *tex, const char* filename );
@@ -118,6 +116,26 @@ void model_draw( Model* mdl, float frame );
 int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
+// collision.c
+typedef struct {
+    Vec start, scaled_start, intersect_point;
+    Vec vel, scaled_vel, norm_vel;
+    float t, radius, inv_radius;
+    int collision;
+} TraceInfo;
+
+//low level collission functions
+void trace_init( TraceInfo* trace, Vec* start, Vec* vel, float radius );
+void trace_end( TraceInfo* trace, Vec* end );
+float trace_dist( TraceInfo* trace );
+void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 );
+int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result );
+int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result );
+
+int ray_intersects_ellipsoid( Vec* origin, Vec* dir, Vec* center, Vec* ellips );
+int ellipsoid_intersects_ellipsoid( Vec* center1, Vec* ellips1, Vec* center2, Vec* ellips2 );
+
+
 // world.c
 World *world_new(void);
 void world_add_object(World *self, Object *object);
@@ -126,8 +144,7 @@ void object_draw( Object *self );
 void world_draw( World *self, Camera *camera );
 int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result );
 Object *world_collision( World *self, Vec* pos, Vec* dir, Vec *result );
-void apply_camera( Camera *camera );
-void apply_orientation( Camera *camera );
+
 
 // octree.c
 

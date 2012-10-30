@@ -168,7 +168,7 @@ void g_render( void *data ) {
     glColor4f(1, 1, 1, 1);
 
     glLoadIdentity();
-    apply_camera(camera);
+    camera_apply(camera);
 
 
     GLfloat ambient[] = { 0, 0, 0, 1.0 };

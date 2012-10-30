@@ -28,7 +28,7 @@ Object *object_new( Vec pos, Model *mdl ) {
 void object_draw( Object *self ) {
     stats_drawn_objects++;
     glPushMatrix();
-    apply_orientation( &self->camera );
+    camera_apply_orientation( &self->camera );
 
     model_draw( self->model, 0 );
     glPopMatrix();
@@ -37,15 +37,15 @@ void object_draw( Object *self ) {
 void world_draw(World *self, Camera *camera) {
     int i;
     for( i = 0; i < self->on; i++ ) {
-        // Vec a, c;
+        Vec a, c;
         Object *o = self->o[i];
-        // vec_sub( &a, &o->camera.p, &camera->p );
-        // vec_cross( &c, &a, &camera->b );
-        // float sidesquare = vec_dot( &c, &c );
-        // float distsquare = vec_dot( &a, &a );
-        // float dot = vec_dot( &camera->b, &a );
-        // if( dot > 0 && distsquare > o->rr ) continue;
-        // if( sidesquare > distsquare + o->rr ) continue;
+        vec_sub( &a, &o->camera.p, &camera->p );
+        vec_cross( &c, &a, &camera->b );
+        float sidesquare = vec_dot( &c, &c );
+        float distsquare = vec_dot( &a, &a );
+        float dot = vec_dot( &camera->b, &a );
+        if( dot > 0 && distsquare > o->rr ) continue;
+        if( sidesquare > distsquare + o->rr ) continue;
 
         object_draw( o );
     }
@@ -90,50 +90,4 @@ Object *world_collision(World *self, Vec* pos, Vec* dir, Vec *result) {
         }
     }
     return col;
-}
-
-void apply_camera(Camera *camera) {
-    GLfloat matrix[16];
-    matrix[0] = camera->r.x;
-    matrix[1] = camera->u.x;
-    matrix[2] = camera->b.x;
-    matrix[3] = 0;
-    matrix[4] = camera->r.y;
-    matrix[5] = camera->u.y;
-    matrix[6] = camera->b.y;
-    matrix[7] = 0;
-    matrix[8] = camera->r.z;
-    matrix[9] = camera->u.z;
-    matrix[10] = camera->b.z;
-    matrix[11] = 0;
-    matrix[12] = 0;
-    matrix[13] = 0;
-    matrix[14] = 0;
-    matrix[15] = 1;
-    glMultMatrixf(matrix);
-
-    glTranslatef(-camera->p.x, -camera->p.y, -camera->p.z);
-}
-
-void apply_orientation(Camera *camera) {
-    glTranslatef(camera->p.x, camera->p.y, camera->p.z);
-
-    GLfloat matrix[16];
-    matrix[0] = camera->r.x;
-    matrix[1] = camera->r.y;
-    matrix[2] = camera->r.z;
-    matrix[3] = 0;
-    matrix[4] = camera->u.x;
-    matrix[5] = camera->u.y;
-    matrix[6] = camera->u.z;
-    matrix[7] = 0;
-    matrix[8] = camera->b.x;
-    matrix[9] = camera->b.y;
-    matrix[10] = camera->b.z;
-    matrix[11] = 0;
-    matrix[12] = 0;
-    matrix[13] = 0;
-    matrix[14] = 0;
-    matrix[15] = 1;
-    glMultMatrixf(matrix);
 }

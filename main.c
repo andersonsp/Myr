@@ -32,7 +32,7 @@ int counter = 0;
 int key_pressed[GK_KEY_MAX] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 Player *player_new(void) {
-    Player *self = calloc(1, sizeof *self);
+    Player *self = g_new0(Player, 1);
     self->camera.r.x = 1;
     self->camera.u.y = 1;
     self->camera.b.z = 1;

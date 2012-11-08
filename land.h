@@ -37,12 +37,17 @@ typedef struct { float x, y, z;  } Vec;
 typedef struct { short s, t;     } Vec2s;
 typedef struct { float s, t;     } Vec2;
 typedef struct { float x,y,z,w;  } Vec4;
+// typedef struct { Vec p, r, u, b; } Transform;
 typedef struct { float x,y,z,w;  } Quat;
-typedef struct { Quat q, d;      } DualQuat;
-
-#define OCTREE_SIZE 10
+// typedef struct { Quat q, d;      } DualQuat;
+typedef struct { float m[16];    } Mat4;
 
 typedef struct _Model Model;
+
+typedef struct {
+    Vec4 plane[6];
+    float fovy, aspect, znear, zfar;
+} Frustum;
 
 typedef struct {
     GLuint id, bpp;
@@ -52,8 +57,8 @@ typedef struct {
 typedef struct {
     Model *model;
     float rr; //squared radius
-    Quat orient;
     Vec pos;
+    Quat rot;
 
     int hits;
 } Object;
@@ -63,48 +68,26 @@ typedef struct {
     Object **o;
 } World;
 
-typedef struct {
-    Object *hit;
-    Quat orient;
-    Vec pos, hitpoint, footpoint;
-
-    float health;
-} Player;
-
-typedef struct {
-    Object *object;
-    Vec velocity;
-    int tick;
-    int hitpoints;
-
-    Vec avoid;
-    int avoid_time;
-
-    float speed;
-    int finished;
-} Monster;
-
-
 //math.c
+void mat4_identity( Mat4 *mat );
+void mat4_ortho( Mat4 *mat, float width, float height, float znear, float zfar );
+void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar );
+void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v );
+
 Vec* vec_add( Vec* r, Vec* a, Vec* b );
 Vec* vec_sub( Vec* r, Vec* a, Vec* b );
 Vec* vec_scale( Vec* r, Vec* a, float s );
 Vec* vec_cross( Vec* r, Vec* a, Vec* b );
 Vec* vec_normalize( Vec* r, Vec* a );
+Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle );
 float vec_dot( Vec* a, Vec* b );
 float vec_len( Vec* a );
 
-Vec* vec_transform( Vec* r, Vec* a, Camera* camera );
-Vec* vec_backtransform( Vec* r, Vec* a, Camera* camera );
-Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle );
-
-// camera.c
-void camera_turn(Camera *camera, float a);
-void camera_pitch(Camera *camera, float a);
-void camera_yaw(Camera *camera, float a);
-void camera_roll(Camera *camera, float a);
-void camera_apply( Camera *camera );
-void camera_apply_orientation( Camera *camera );
+Quat* quat_invert( Quat *r, Quat *q );
+Quat* quat_normalize( Quat *r, Quat *q );
+Quat* quat_mul( Quat *r, Quat *q1, Quat *q2 );
+Quat* quat_from_axis_angle( Quat *q, Vec *axis, float ang );
+Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v );
 
 // assets.c
 int texture_load( Texture *tex, const char* filename );
@@ -141,12 +124,27 @@ World *world_new(void);
 void world_add_object(World *self, Object *object);
 Object *object_new( Vec pos, Model *mdl );
 void object_draw( Object *self );
-void world_draw( World *self, Camera *camera );
+void world_draw( World *self, Object *camera );
 int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result );
 Object *world_collision( World *self, Vec* pos, Vec* dir, Vec *result );
 
+void object_move( Object *o, float x, float y, float z );
+void object_turn( Object *o, float a );
+void object_pitch( Object *o, float a );
+void object_yaw( Object *o, float a );
+void object_roll( Object *o, float a );
+Vec* object_transform( Vec* r, Vec* a, Object* o );
+Vec* object_back_transform( Vec* r, Vec* a, Object* o );
+
+void apply_camera( Object *o );
+void apply_orientation( Object *o );
 
 // octree.c
+
+// camera.c
+void camera_init( Object* cam, int type );
+void camera_update_tps( Object* cam, Vec* target, float yaw, float pitch );
+void camera_view( Object* cam, Mat4* view );
 
 
 // ===============================================================

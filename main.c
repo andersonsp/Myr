@@ -1,15 +1,36 @@
 #include "land.h"
 
 
-#define MONSTER_COUNT 33
-#define PARTICLE_COUNT 33
+// #define MONSTER_COUNT 33
+// #define PARTICLE_COUNT 33
 
-extern Player *player;
-extern World *world;
-extern Object *landscape;
 extern int stats_triangle_intersections;
 extern int debug_disable_grid;
 extern int stats_drawn_objects;
+
+
+typedef struct {
+    Object *object;
+    Object *hit;
+    Vec hitpoint;
+    Vec footpoint;
+
+    float health;
+} Player;
+
+typedef struct {
+    Object *object;
+    Vec velocity;
+    int tick;
+    int hitpoints;
+
+    Vec avoid;
+    int avoid_time;
+
+    float speed;
+    int finished;
+} Monster;
+
 
 World *world;
 Model *level_mdl;
@@ -22,9 +43,11 @@ int boss;
 int gamestate = 0;
 int counter = 0;
 
+Mat4 persp, view;
+
 // int monsters_alive;
 
-
+static Vec x_axis = {1.0f, 0.0f, 0.0f}, y_axis = {0.0f, 1.0f, 0.0f}, neg_z_axis = {0.0f, 0.0f, -1.0f};
 
 //
 // Entities
@@ -32,55 +55,48 @@ int counter = 0;
 int key_pressed[GK_KEY_MAX] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 Player *player_new(void) {
-    Player *self = calloc(1, sizeof *self);
-    self->camera.r.x = 1;
-    self->camera.u.y = 1;
-    self->camera.b.z = 1;
+    Player *self = g_new0(Player, 1);
+    self->object = object_new( (Vec){ .0, .0, .0}, NULL );
     self->health = 1;
     return self;
 }
 
 void player_ai(Player *self) {
     int i;
-    Camera *camera = &self->camera;
+    Object *o = self->object;
+    float kx = .0f, ky = .0f, kz = .0f;
+    int xm = 0, ym = 0;
+    if( key_pressed[GK_A] ) kx = -0.3f;
+    if( key_pressed[GK_D] ) kx = 0.3f;
+    if( key_pressed[GK_W] ) kz = 0.3f;
+    if( key_pressed[GK_S] ) kz = -0.3f;
+    if( key_pressed[GK_LEFT]  ) xm = 1.0f;
+    if( key_pressed[GK_RIGHT] ) xm = -1.0f;
+    if( key_pressed[GK_UP]    ) ym = 1.0f;
+    if( key_pressed[GK_DOWN]  ) ym = -1.0f;
 
-    int kx = 0, ky = 0, kz = 0, xm = 0, ym = 0;
-    if( key_pressed[GK_A] ) kx = -3;
-    if( key_pressed[GK_D] ) kx = 3;
-    if( key_pressed[GK_W] ) kz = -3;
-    if( key_pressed[GK_S] ) kz = 3;
-    if( key_pressed[GK_LEFT]  ) xm = -10;
-    if( key_pressed[GK_RIGHT] ) xm = 10;
-    if( key_pressed[GK_UP]    ) ym = -10;
-    if( key_pressed[GK_DOWN]  ) ym = 10;
+    object_move( o, kx, ky, kz );
 
-    float f = 0.1;
-
-    Vec b, r, u;
-    vec_add( &camera->p, &camera->p, vec_scale(&b, &camera->b, kz * f) );
-    vec_add( &camera->p, &camera->p, vec_scale(&r, &camera->r, kx * f) );
-    vec_add( &camera->p, &camera->p, vec_scale(&u, &camera->u, ky * f) );
-
-    float x = xm * 0.1 * G_PI / 180.0;
-    camera_turn( camera, x );
-
-    float y = ym * 0.1 * G_PI / 180.0;
-    camera_pitch(camera, y);
+    object_turn( o, g_radians(xm) );
+    object_pitch( o, g_radians(ym) );
 
     Object *col;
     Vec pos;
-    Vec dir[6] = {camera->r, camera->u, camera->b};
-    vec_scale( &dir[3], &camera->r, -1.0 );
-    vec_scale( &dir[3], &camera->u, -1.0 );
-    vec_scale( &dir[3], &camera->b, -1.0 );
+    Vec dir[6];
+    quat_vec_mul( &dir[0], &o->rot, &x_axis );
+    dir[1] = y_axis;
+    vec_cross( &dir[2], &dir[0], &dir[1] );
+    vec_scale( &dir[3], &dir[0], -1.0 );
+    vec_scale( &dir[4], &dir[1], -1.0 );
+    vec_scale( &dir[5], &dir[2], -1.0 );
     // Push away from nearby geometry.
     for( i = 0; i < 6; i++ ) {
-        col = world_collision( world, &camera->p, &dir[i], &pos );
+        col = world_collision( world, &o->pos, &dir[i], &pos );
         if( col ) {
             Vec diff, s_dir;
-            vec_sub( &diff, &pos, &camera->p );
+            vec_sub( &diff, &pos, &o->pos );
             if( vec_dot(&diff, &diff) < 1 ) {
-                vec_add( &camera->p, &pos, vec_scale(&s_dir, &dir[i], -1) );
+                vec_add( &o->pos, &pos, vec_scale(&s_dir, &dir[i], -1) );
             }
         }
     }
@@ -88,21 +104,21 @@ void player_ai(Player *self) {
     // Ground collision.
     // TODO: Jumping
     Vec forward, down = {0, -1, 0}, fall_delta = {0, 2, 0};
-    col = world_collision(world, &camera->p, &down, &self->footpoint);
+    col = world_collision(world, &o->pos, &down, &self->footpoint);
     if( col ) {
         Vec diff;
-        vec_sub( &diff, &self->footpoint, &camera->p );
+        vec_sub( &diff, &self->footpoint, &o->pos );
         if ( vec_dot(&diff, &diff) < 9.0 ) {
-            vec_add( &camera->p, &self->footpoint, &fall_delta );
+            vec_add( &o->pos, &self->footpoint, &fall_delta );
         } else { // fall down
-            camera->p.y -= 0.5;
+            o->pos.y -= 0.5;
         }
     } else {// uh oh - fell out of level
-        if (camera->p.y > -100) camera->p.y--;
+        if (o->pos.y > -100) o->pos.y--;
     }
 
-    vec_scale( &forward, &camera->b, -1 );
-    self->hit = world_collision( world, &camera->p, &forward, &self->hitpoint );
+    quat_vec_mul( &forward, &o->rot, &neg_z_axis );
+    self->hit = world_collision( world, &o->pos, &forward, &self->hitpoint );
 }
 
 
@@ -126,6 +142,7 @@ void g_configure( GConfig *conf ) {
 }
 
 void g_initialize( int width, int height, void *data ) {
+    float ar = (float) width / (float) height;
     glViewport(0, 0, width, height);
 
     glClearColor(0, 0.5, 0.5, 0);
@@ -137,10 +154,8 @@ void g_initialize( int width, int height, void *data ) {
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    float w = width;
-    float h = height;
-    float d = 0.1;
-    glFrustum(-w * d / w, w * d / w, -h * d / w, h * d / w, d, 1000);
+    mat4_persp( &persp, 60.0f, ar, 0.2f, 1000.0f );
+    glMultMatrixf( persp.m );
 
     glMatrixMode(GL_MODELVIEW);
 
@@ -149,14 +164,13 @@ void g_initialize( int width, int height, void *data ) {
     level_mdl = model_load( "level_concept.iqm" );
     if( !level_mdl ) g_fatal_error( "couldn't load level_concept.iqm model" );
 
-    landscape = object_new( (Vec){0, 0, 0}, level_mdl );
+    landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl );
     world_add_object( world, landscape );
 
     player = player_new();
 }
 
 void g_render( void *data ) {
-    Camera *camera = &player->camera;
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
@@ -168,7 +182,7 @@ void g_render( void *data ) {
     glColor4f(1, 1, 1, 1);
 
     glLoadIdentity();
-    camera_apply(camera);
+    apply_camera( player->object );
 
 
     GLfloat ambient[] = { 0, 0, 0, 1.0 };
@@ -197,7 +211,8 @@ void g_render( void *data ) {
 
 
     stats_drawn_objects = 0;
-    world_draw(world, &player->camera);
+    Object *o = player->object;
+    world_draw( world, o );
 
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
@@ -206,14 +221,20 @@ void g_render( void *data ) {
     if( player->hit ) {
         Vec hitpoint = player->hitpoint;
         Vec vl, vr, vu, vd, vl2, vr2, vu2, vd2;
-        vec_add( &vl, &hitpoint, vec_scale(&vl, &camera->r, 0.9) );
-        vec_sub( &vr, &hitpoint, vec_scale(&vr, &camera->r, 0.9) );
-        vec_add( &vu, &hitpoint, vec_scale(&vu, &camera->u, 0.9) );
-        vec_sub( &vd, &hitpoint, vec_scale(&vd, &camera->u, 0.9) );
-        vec_add( &vl2, &hitpoint, vec_scale(&vl2, &camera->r, 0.4));
-        vec_sub( &vr2, &hitpoint, vec_scale(&vr2, &camera->r, 0.4));
-        vec_add( &vu2, &hitpoint, vec_scale(&vu2, &camera->u, 0.4));
-        vec_sub( &vd2, &hitpoint, vec_scale(&vd2, &camera->u, 0.4));
+        //until I learn how to do it the right way
+        Vec r, u;
+
+        quat_vec_mul( &r, &o->rot, &x_axis );
+        quat_vec_mul( &u, &o->rot, &y_axis );
+
+        vec_add( &vl, &hitpoint, vec_scale(&vl, &r, 0.9) );
+        vec_sub( &vr, &hitpoint, vec_scale(&vr, &r, 0.9) );
+        vec_add( &vu, &hitpoint, vec_scale(&vu, &u, 0.9) );
+        vec_sub( &vd, &hitpoint, vec_scale(&vd, &u, 0.9) );
+        vec_add( &vl2, &hitpoint, vec_scale(&vl2, &r, 0.4));
+        vec_sub( &vr2, &hitpoint, vec_scale(&vr2, &r, 0.4));
+        vec_add( &vu2, &hitpoint, vec_scale(&vu2, &u, 0.4));
+        vec_sub( &vd2, &hitpoint, vec_scale(&vd2, &u, 0.4));
 
         glBegin( GL_LINES );
         glColor4f( 0, 1, 0, 1 );
@@ -236,7 +257,7 @@ void g_update( unsigned int milliseconds, void *data ) {
     if( counter < 300 ) player_ai(player);
 
     if( gamestate == 0 ) {
-        if (player->camera.p.y < -90) player->health = 0;
+        if (player->object->pos.y < -90) player->health = 0;
         if (player->health <= 0) gamestate = 1;
     } else {
         counter++;

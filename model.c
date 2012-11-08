@@ -105,7 +105,7 @@ struct _Model {
     IqmBounds *bounds;
 
     // used to transform animations
-    DualQuat *base, *inversebase, *outframe, *frames;
+    // DualQuat *base, *inversebase, *outframe, *frames;
 };
 
 
@@ -252,8 +252,8 @@ void model_destroy( Model *mdl ){
     if( mdl->verts ) g_free( mdl->verts );
     if( mdl->out_verts ) g_free( mdl->out_verts );
     if( mdl->joints ) g_free( mdl->joints );
-    if( mdl->frames ) g_free( mdl->frames );
-    if( mdl->outframe ) g_free( mdl->outframe );
+    // if( mdl->frames ) g_free( mdl->frames );
+    // if( mdl->outframe ) g_free( mdl->outframe );
 
     if( mdl->textures ) g_free( mdl->textures );
     g_free( mdl );

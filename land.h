@@ -33,26 +33,24 @@
 
 //
 
+typedef struct { float m[16];    } Mat4;
 typedef struct { float x, y, z;  } Vec;
 typedef struct { short s, t;     } Vec2s;
 typedef struct { float s, t;     } Vec2;
 typedef struct { float x,y,z,w;  } Vec4;
-// typedef struct { Vec p, r, u, b; } Transform;
 typedef struct { float x,y,z,w;  } Quat;
-// typedef struct { Quat q, d;      } DualQuat;
-typedef struct { float m[16];    } Mat4;
 
+typedef struct {
+    GLuint id, bpp;
+    GLint width, height;
+} Texture;
+typedef struct _Font Font;
 typedef struct _Model Model;
 
 typedef struct {
     Vec4 plane[6];
     float fovy, aspect, znear, zfar;
 } Frustum;
-
-typedef struct {
-    GLuint id, bpp;
-    GLint width, height;
-} Texture;
 
 typedef struct {
     Model *model;
@@ -91,6 +89,10 @@ Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v );
 
 // assets.c
 int texture_load( Texture *tex, const char* filename );
+// destroy with glDeleteTex()
+Font* font_new (char *filename);
+void font_render( Font *fnt, char *str );
+// destroy with g_free();
 
 // model.c
 Model* model_load( const char *filename );
@@ -117,7 +119,6 @@ int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *
 
 int ray_intersects_ellipsoid( Vec* origin, Vec* dir, Vec* center, Vec* ellips );
 int ellipsoid_intersects_ellipsoid( Vec* center1, Vec* ellips1, Vec* center2, Vec* ellips2 );
-
 
 // world.c
 World *world_new(void);

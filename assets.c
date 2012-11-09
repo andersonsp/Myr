@@ -1,5 +1,97 @@
 #include "land.h"
 
+typedef struct {
+    char id[4];
+    int version;
+    int tex_w, tex_h;
+    int start, end;
+    int avgh, avgw;
+}Font_header;
+
+typedef struct {
+    float u0, v0;
+    float u1, v1;
+
+    float x0, y0;
+    float x1, y1;
+
+    float advance;
+} Glyph;
+
+struct _Font {
+    unsigned int tex;
+    int start, end;
+    Glyph glyph[1];
+};
+
+// Rigth now it uses only the fixed function pipeline
+// in the future a streaming VBO will be used if available
+//
+Font* font_new (char *filename){
+
+    Font_header header; // to retrieve the header of the font
+    Font* fnt;
+    FILE* filein;
+    unsigned char * pixels;
+
+    //Open font file
+    char filepath[256];
+    sprintf( filepath, "data/fonts/%s", filename );
+    if ( !(filein = fopen(filepath, "rb")) ) return NULL;
+
+    fread( &header, sizeof(Font_header), 1, filein );
+    if( strncmp(header.id, "SFNT", 4) != 0 || header.version != 3 ){
+        printf("not a valid SFN file: %s\n", filename);
+        fclose(filein);
+        return NULL;
+    }
+
+    fnt = (Font*) malloc( sizeof(Font) + sizeof(Glyph)*(header.end - header.start) );
+    if(!fnt) return NULL;
+
+    pixels = g_new( unsigned char, header.tex_w*header.tex_h );
+    if( !pixels ){
+        free(fnt);
+        return NULL;
+    }
+
+    fnt->start = header.start;
+    fnt->end = header.end;
+
+    fread( fnt->glyph, sizeof(Glyph), (header.end - header.start), filein );
+    fread( pixels, 1, (header.tex_w*header.tex_h), filein );
+
+    glGenTextures(1, &fnt->tex);
+    glBindTexture(GL_TEXTURE_2D, fnt->tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, header.tex_w, header.tex_h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, pixels);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    g_free( pixels );
+
+    return fnt;
+}
+
+void font_render ( Font *fnt, char *str ){
+    if(!fnt) return;
+
+    int x = 0, y = 0, c;
+    glBindTexture(GL_TEXTURE_2D, fnt->tex);
+    glBegin(GL_QUADS);
+    while (*str) {
+      if (*str >= fnt->start && *str < fnt->end) {
+         c = *str - fnt->start;
+         glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y0 );
+         glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y1 );
+         glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y1 );
+         glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y0 );
+
+         x += fnt->glyph[ c ].advance;
+      }
+      ++str;
+    }
+    glEnd();
+}
+
 //
 // Texture
 //

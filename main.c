@@ -43,7 +43,8 @@ int boss;
 int gamestate = 0;
 int counter = 0;
 
-Mat4 persp, view;
+Mat4 ortho, persp, view;
+Font* fnt;
 
 // int monsters_alive;
 
@@ -148,6 +149,8 @@ void g_initialize( int width, int height, void *data ) {
     glClearColor(0, 0.5, 0.5, 0);
     glClearDepth(1);
 
+    glEnable( GL_BLEND );
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
@@ -159,6 +162,10 @@ void g_initialize( int width, int height, void *data ) {
 
     glMatrixMode(GL_MODELVIEW);
 
+    mat4_ortho( &ortho, width, height, 0.0f, 1.0f );
+
+    fnt = font_new( "dejavu16.sfn" );
+    if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
 
     world = world_new();
     level_mdl = model_load( "level_concept.iqm" );
@@ -181,6 +188,10 @@ void g_render( void *data ) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor4f(1, 1, 1, 1);
 
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMultMatrixf( persp.m );
+    glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     apply_camera( player->object );
 
@@ -251,6 +262,42 @@ void g_render( void *data ) {
             glVertex3f( vd2.x, vd2.y, vd2.z );
         glEnd();
     }
+
+
+    // draw 2D composition layer ( HUD )
+    char buffer[512];
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMultMatrixf( ortho.m );
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    glColor4f( 1.0, 1.0, 1.0, .3 );
+    glBegin(GL_QUADS);
+        glVertex3f( -395.0f, 295.0f, 0.0f);              // Top Left
+        glVertex3f( 1.0f, 295.0f, 0.0f);              // Top Right
+        glVertex3f( 1.0f, 180.0f, 0.0f);              // Bottom Right
+        glVertex3f( -395.0, 180.0, 0.0 );              // Bottom Left
+    glEnd();                            // Done Drawing The Quad
+
+    glEnable( GL_TEXTURE_2D );
+    glColor4f( 0.0, 0.0, 0.0, 1 );
+    glTranslatef( -390, 280.0, 0.0 );
+    font_render( fnt, "Testing Myr Engine by aSP" );
+
+    // // glTranslatef( 0.0, -15.0, 0.0 );
+    // // sprintf(buffer, "Entities drawn: %d", count);
+    // // g_font_render( fnt, buffer );
+
+    glTranslatef( 0.0, -15.0, 0.0 );
+    sprintf(buffer, "Player loc: %1.3f, %1.3f, %1.3f", o->pos.x, o->pos.y, o->pos.z );
+    font_render( fnt, buffer );
+
+    // // glTranslatef( 0.0, -15.0, 0.0 );
+    // // sprintf(buffer, "Collided entity: %d", collide_entity );
+    // // g_font_render( fnt, buffer );
+
+    glEnable( GL_DEPTH_TEST );
 }
 
 void g_update( unsigned int milliseconds, void *data ) {

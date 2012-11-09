@@ -289,6 +289,8 @@ void model_draw( Model *mdl, float frame ){
 
 int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
     int i, j;
+    TraceInfo ti;
+    trace_init( &ti, pos, dir, 0.0f );
     for( i = 0; i < mdl->num_meshes; i++ ) {
         IqmMesh* m = &mdl->meshes[i];
         for( j=m->first_triangle; j<m->num_triangles; j++ ) {
@@ -297,8 +299,12 @@ int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
             p3 = mdl->verts[mdl->tris[j].vertex[0]].loc;
             p2 = mdl->verts[mdl->tris[j].vertex[1]].loc;
             p1 = mdl->verts[mdl->tris[j].vertex[2]].loc;
-            if( ray_intersects_triangle(pos, dir, &p1, &p2, &p3, result) ) return 1;
+            trace_ray_triangle(&ti, &p1, &p2, &p3);
         }
+    }
+    if( ti.collision ) {
+        *result = ti.intersect_point;
+        return 1;
     }
     return 0;
 }

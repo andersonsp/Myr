@@ -81,7 +81,7 @@ Object *world_collision(World *self, Vec* pos, Vec* dir, Vec *result) {
         Object *o = self->o[i];
         Vec tmp1, tmp2;
         if( object_collision(o, pos, dir, &tmp1) ) {
-            float d = vec_len( vec_sub( &tmp2, &tmp1, pos) );
+            float d = vec_len( vec_sub(&tmp2, &tmp1, pos) );
             if( d < min ) {
                 *result = tmp1;
                 col = o;

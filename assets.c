@@ -27,10 +27,10 @@ struct _Font {
 // Rigth now it uses only the fixed function pipeline
 // in the future a streaming VBO will be used if available
 //
-Font* font_new (char *filename){
+TexFont* tex_font_new (char *filename){
 
     Font_header header; // to retrieve the header of the font
-    Font* fnt;
+    TexFont* fnt;
     FILE* filein;
     unsigned char * pixels;
 
@@ -46,7 +46,7 @@ Font* font_new (char *filename){
         return NULL;
     }
 
-    fnt = (Font*) malloc( sizeof(Font) + sizeof(Glyph)*(header.end - header.start) );
+    fnt = (TexFont*) malloc( sizeof(TexFont) + sizeof(Glyph)*(header.end - header.start) );
     if(!fnt) return NULL;
 
     pixels = g_new( unsigned char, header.tex_w*header.tex_h );
@@ -71,7 +71,7 @@ Font* font_new (char *filename){
     return fnt;
 }
 
-void font_render ( Font *fnt, char *str ){
+void tex_font_render ( TexFont *fnt, char *str ){
     if(!fnt) return;
 
     int x = 0, y = 0, c;

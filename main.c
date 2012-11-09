@@ -4,10 +4,7 @@
 // #define MONSTER_COUNT 33
 // #define PARTICLE_COUNT 33
 
-extern int stats_triangle_intersections;
-extern int debug_disable_grid;
 extern int stats_drawn_objects;
-
 
 typedef struct {
     Object *object;
@@ -44,11 +41,13 @@ int gamestate = 0;
 int counter = 0;
 
 Mat4 ortho, persp, view;
-Font* fnt;
+TexFont* fnt;
 
 // int monsters_alive;
 
-static Vec x_axis = {1.0f, 0.0f, 0.0f}, y_axis = {0.0f, 1.0f, 0.0f}, neg_z_axis = {0.0f, 0.0f, -1.0f};
+static Vec x_axis = {1.0f, 0.0f, 0.0f},
+    y_axis = {0.0f, 1.0f, 0.0f},
+    neg_z_axis = {0.0f, 0.0f, -1.0f};
 
 //
 // Entities
@@ -164,7 +163,7 @@ void g_initialize( int width, int height, void *data ) {
 
     mat4_ortho( &ortho, width, height, 0.0f, 1.0f );
 
-    fnt = font_new( "dejavu16.sfn" );
+    fnt = tex_font_new( "dejavu16.sfn" );
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
 
     world = world_new();
@@ -283,7 +282,7 @@ void g_render( void *data ) {
     glEnable( GL_TEXTURE_2D );
     glColor4f( 0.0, 0.0, 0.0, 1 );
     glTranslatef( -390, 280.0, 0.0 );
-    font_render( fnt, "Testing Myr Engine by aSP" );
+    tex_font_render( fnt, "Testing Myr Engine by aSP" );
 
     // // glTranslatef( 0.0, -15.0, 0.0 );
     // // sprintf(buffer, "Entities drawn: %d", count);
@@ -291,7 +290,7 @@ void g_render( void *data ) {
 
     glTranslatef( 0.0, -15.0, 0.0 );
     sprintf(buffer, "Player loc: %1.3f, %1.3f, %1.3f", o->pos.x, o->pos.y, o->pos.z );
-    font_render( fnt, buffer );
+    tex_font_render( fnt, buffer );
 
     // // glTranslatef( 0.0, -15.0, 0.0 );
     // // sprintf(buffer, "Collided entity: %d", collide_entity );

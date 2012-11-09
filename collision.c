@@ -3,38 +3,6 @@
 // Much of this was taken from the paper "Improved Collision detection and Response" by Kasper Fauerby
 // http://www.peroxide.dk/papers/collision/collision.pdf
 
-// SAMPLE USAGE:
-/*
-
-var traceInfo = new TraceInfo();
-
-var startPoint = [-10, 0, 0];
-var endPoint = [10, 0, 0];
-var radius = 0.5;
-
-// Tracing a 0.5 radius sphere moving from X:-10 to X:10
-traceInfo.resetTrace(startPoint, endPoint, radius);
-
-// You really need to do a good broadphase triangle set reduction (ie: octree)
-// to reduce the number of triangles you're colliding against. This is not a cheap
-// test!
-for(i in sceneTriangles) {
-    tri = sceneTriangles[i];
-    traceSphereTriangle(tri.verts[0], tri.verts[1], tri.verts[2], traceInfo);
-}
-
-if(traceInfo.collision) {
-    // This will get the position of the sphere when it collided with the closest triangle
-    traceInfo.getTraceEndpoint(endPoint);
-
-    // This is the point on the triangle where the sphere collided.
-    traceInfo.intersectPoint;
-
-    // You can use the above two values to generate an appropriate collision response.
-}
-
-*/
-
 static int get_lowest_root( float a, float b, float c, float max_r, float* root ) {
     // Check if a solution exists
     float determinant = b*b - 4.0f*a*c;
@@ -100,6 +68,7 @@ static float test_edge( TraceInfo* trace, Vec* pa, Vec* pb, Vec* start, Vec* vel
         // Check if intersection against the line segment:
         float f = (edge_dot_vel*new_t - edge_dot_sphere_vert) / edge_sqr_len;
         if( f >= 0.0 && f <= 1.0 ) {
+            trace->collision = 1;
             vec_scale( &v, &edge, f );
             vec_add( &v, &v, pa );
             trace->t = new_t;
@@ -142,8 +111,7 @@ void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 ) {
     vec_scale( &tb, p1, trace->inv_radius );
     vec_scale( &tc, p2, trace->inv_radius );
 
-    // Calculate triangle normal.
-    // This may be better to do as a pre-process
+    // Calculate triangle normal. This may be better to do as a pre-process
     vec_sub( &pab, &tb, &ta );
     vec_sub( &pac, &tc, &ta );
     vec_cross( &norm, &pab, &pac );
@@ -194,14 +162,12 @@ void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 ) {
         if( t1 > 1.0 ) t1 = 1.0;
     }
 
-    // If the closest possible collision point is further away
-    // than an already detected collision then there's no point
-    // in testing further.
+    // If the closest possible collision point is further away than an already detected collision
+    // then there's no point in testing further.
     if( t0 >= trace->t ) return;
 
-    // t0 and t1 now represent the range of the sphere movement
-    // during which it intersects with the triangle plane.
-    // Collisions cannot happen outside that range.
+    // t0 and t1 now represent the range of the sphere movement during which it intersects with
+    // the triangle plane. Collisions cannot happen outside that range.
 
     // Check for collision againt the triangle face:
     if( !embedded ) {
@@ -243,47 +209,31 @@ void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 ) {
  // *     pos + t * dir, t in R
  // * Point in triangle:
  // *     (1 - u - v) * v0 + u * v1 + v * v2, u >= 0, v >= 0, u + v <= 1
-int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result ) {
+void trace_ray_triangle( TraceInfo* ti, Vec* v0, Vec* v1, Vec* v2 ) {
     Vec eu, ev, cv, vt, cu;
     vec_sub( &eu, v1, v0 );
     vec_sub( &ev, v2, v0 );
 
-    vec_cross( &cv, dir, &ev );
+    vec_cross( &cv, &ti->vel, &ev );
     float det = vec_dot( &eu, &cv );
+    if( det <= 0 ) return; // backface cull
 
-    // cull if in triangle plane, of hit backface
-    if( det <= 0 ) return 0;
-
-    vec_sub( &vt, pos, v0 );
-
+    vec_sub( &vt, &ti->start, v0 );
     float u = vec_dot( &vt, &cv );
-    if( u < 0 || u > det ) return 0;
+    if( u < 0 || u > det ) return;
 
     vec_cross( &cu, &vt, &eu );
-
-    float v = vec_dot( dir, &cu );
-    if( v < 0 || u+v > det ) return 0;
+    float v = vec_dot( &ti->vel, &cu );
+    if( v < 0 || u+v > det ) return;
 
     float t = vec_dot( &ev, &cu );
-    if( t < 0 ) return 0;
+    if( t < 0 ) return;
 
     t /= det;
+    if( t < ti->t ) ti->t = t;
 
-    vec_add( result, pos, vec_scale(result, dir, t) );
-    return 1;
-}
-
-int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result ) {
-    Vec d, dn, s;
-    vec_sub( &d, p2, p1 );
-    vec_normalize( &dn, &d );
-    if( ray_intersects_triangle(p1, &dn, v0, v1, v2, result) ) {
-        vec_sub( &s, result, p1 );
-        float ss = vec_dot( &s, &s );
-        float dd = vec_dot( &d, &d );
-        if( ss <= dd ) return 1;
-    }
-    return 0;
+    ti->collision = 1;
+    vec_add( &ti->intersect_point, &ti->start, vec_scale(&ti->intersect_point, &ti->vel, t) );
 }
 
 void trace_init( TraceInfo* trace, Vec* start, Vec* vel, float radius ){

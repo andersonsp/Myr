@@ -44,7 +44,7 @@ typedef struct {
     GLuint id, bpp;
     GLint width, height;
 } Texture;
-typedef struct _Font Font;
+typedef struct _Font TexFont;
 typedef struct _Model Model;
 
 typedef struct {
@@ -90,8 +90,8 @@ Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v );
 // assets.c
 int texture_load( Texture *tex, const char* filename );
 // destroy with glDeleteTex()
-Font* font_new (char *filename);
-void font_render( Font *fnt, char *str );
+TexFont* tex_font_new (char *filename);
+void tex_font_render( TexFont *fnt, char *str );
 // destroy with g_free();
 
 // model.c
@@ -101,7 +101,7 @@ void model_draw( Model* mdl, float frame );
 int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
-// collision.c
+// collision.c - low level collission functions
 typedef struct {
     Vec start, scaled_start, intersect_point;
     Vec vel, scaled_vel, norm_vel;
@@ -109,13 +109,11 @@ typedef struct {
     int collision;
 } TraceInfo;
 
-//low level collission functions
 void trace_init( TraceInfo* trace, Vec* start, Vec* vel, float radius );
 void trace_end( TraceInfo* trace, Vec* end );
 float trace_dist( TraceInfo* trace );
 void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 );
-int ray_intersects_triangle( Vec* pos, Vec* dir, Vec* v0, Vec* v1, Vec* v2, Vec *result );
-int line_intersects_triangle( Vec* p1, Vec* p2, Vec* v0, Vec* v1, Vec* v2, Vec *result );
+void trace_ray_triangle( TraceInfo* trace, Vec* v0, Vec* v1, Vec* v2 );
 
 int ray_intersects_ellipsoid( Vec* origin, Vec* dir, Vec* center, Vec* ellips );
 int ellipsoid_intersects_ellipsoid( Vec* center1, Vec* ellips1, Vec* center2, Vec* ellips2 );

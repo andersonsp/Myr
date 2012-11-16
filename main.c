@@ -56,13 +56,12 @@ int key_pressed[GK_KEY_MAX] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 Player *player_new(void) {
     Player *self = g_new0(Player, 1);
-    self->object = object_new( (Vec){ .0, .0, .0}, NULL );
+    self->object = object_new( (Vec){ .0, 5.0, .0}, NULL );
     self->health = 1;
     return self;
 }
 
 void player_ai(Player *self) {
-    int i;
     Object *o = self->object;
     float kx = .0f, ky = .0f, kz = .0f;
     int xm = 0, ym = 0;
@@ -75,50 +74,32 @@ void player_ai(Player *self) {
     if( key_pressed[GK_UP]    ) ym = 1.0f;
     if( key_pressed[GK_DOWN]  ) ym = -1.0f;
 
+    Vec dir, orig = o->pos;
     object_move( o, kx, ky, kz );
+    vec_sub( &dir, &o->pos, &orig );
 
     object_turn( o, g_radians(xm) );
     object_pitch( o, g_radians(ym) );
 
-    Object *col;
     Vec pos;
-    Vec dir[6];
-    quat_vec_mul( &dir[0], &o->rot, &x_axis );
-    dir[1] = y_axis;
-    vec_cross( &dir[2], &dir[0], &dir[1] );
-    vec_scale( &dir[3], &dir[0], -1.0 );
-    vec_scale( &dir[4], &dir[1], -1.0 );
-    vec_scale( &dir[5], &dir[2], -1.0 );
-    // Push away from nearby geometry.
-    for( i = 0; i < 6; i++ ) {
-        col = world_collision( world, &o->pos, &dir[i], &pos );
-        if( col ) {
-            Vec diff, s_dir;
-            vec_sub( &diff, &pos, &o->pos );
-            if( vec_dot(&diff, &diff) < 1 ) {
-                vec_add( &o->pos, &pos, vec_scale(&s_dir, &dir[i], -1) );
-            }
-        }
+    Object *col = world_collision( world, &orig, &dir, 3.0f, &pos );
+    if( col ) {
+        // collide & slide
+        o->pos = pos;
     }
 
     // Ground collision.
     // TODO: Jumping
-    Vec forward, down = {0, -1, 0}, fall_delta = {0, 2, 0};
-    col = world_collision(world, &o->pos, &down, &self->footpoint);
+    Vec forward, down = {0, -1, 0};
+    col = world_collision(world, &o->pos, &down, 3.0f, &self->footpoint);
     if( col ) {
-        Vec diff;
-        vec_sub( &diff, &self->footpoint, &o->pos );
-        if ( vec_dot(&diff, &diff) < 9.0 ) {
-            vec_add( &o->pos, &self->footpoint, &fall_delta );
-        } else { // fall down
-            o->pos.y -= 0.5;
-        }
+        o->pos = self->footpoint;
     } else {// uh oh - fell out of level
         if (o->pos.y > -100) o->pos.y--;
     }
 
     quat_vec_mul( &forward, &o->rot, &neg_z_axis );
-    self->hit = world_collision( world, &o->pos, &forward, &self->hitpoint );
+    self->hit = world_collision( world, &o->pos, &forward, 0.0f, &self->hitpoint );
 }
 
 

@@ -286,11 +286,13 @@ void model_draw( Model *mdl, float frame ){
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 
+#define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision
+#define MIN_FRACTION    (0.0005f) // at least 0.5% movement along the direction vector
 
-int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
+int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result ) {
     int i, j;
     TraceInfo ti;
-    trace_init( &ti, pos, dir, 0.0f );
+    trace_init( &ti, pos, dir, radius );
     for( i = 0; i < mdl->num_meshes; i++ ) {
         IqmMesh* m = &mdl->meshes[i];
         for( j=m->first_triangle; j<m->num_triangles; j++ ) {
@@ -299,11 +301,20 @@ int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
             p3 = mdl->verts[mdl->tris[j].vertex[0]].loc;
             p2 = mdl->verts[mdl->tris[j].vertex[1]].loc;
             p1 = mdl->verts[mdl->tris[j].vertex[2]].loc;
-            trace_ray_triangle(&ti, &p1, &p2, &p3);
+            if( radius > 0.0f ) trace_sphere_triangle(&ti, &p1, &p2, &p3);
+            else trace_ray_triangle(&ti, &p1, &p2, &p3);
         }
     }
     if( ti.collision ) {
-        *result = ti.intersect_point;
+        if( radius > 0.0f ) {
+            // Vec norm;
+            // vec_normalize( &norm, vec_sub(&norm, &ti.start, &ti.intersect_point) );
+            // float t = ti.t + DIST_EPSILON/vec_dot( &norm, &ti.vel );
+            // if( t < MIN_FRACTION ) t = .0f;
+            vec_add( result, &ti.start, vec_scale( result, &ti.vel, ti.t) );
+        } else {
+            *result = ti.intersect_point;
+        }
         return 1;
     }
     return 0;

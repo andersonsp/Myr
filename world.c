@@ -51,7 +51,7 @@ void world_draw(World *self, Object *camera) {
     }
 }
 
-int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result ) {
+int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result ) {
     Vec a, c, dirpos, relpos, reldir, relresult;
     vec_sub( &a, &o->pos, pos );
     vec_cross( &c, &a, dir );
@@ -63,7 +63,7 @@ int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result ) {
         vec_sub( &reldir, &dirpos, &relpos );
         int r;
         // if (debug_disable_grid)
-            r = model_collision( o->model, &relpos, &reldir, &relresult );
+            r = model_collision( o->model, &relpos, &reldir, radius, &relresult );
         // else r = grid_collision(o->mesh->grid, relpos, reldir, &relresult);
         if( r ) {
             object_back_transform( result, &relresult, o );
@@ -73,14 +73,14 @@ int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result ) {
     return 0;
 }
 
-Object *world_collision(World *self, Vec* pos, Vec* dir, Vec *result) {
+Object *world_collision(World *self, Vec* pos, Vec* dir, float radius, Vec *result) {
     int i;
     float min = 10000000000;
     Object *col = NULL;
     for (i = 0; i < self->on; i++) {
         Object *o = self->o[i];
         Vec tmp1, tmp2;
-        if( object_collision(o, pos, dir, &tmp1) ) {
+        if( object_collision(o, pos, dir, radius, &tmp1) ) {
             float d = vec_len( vec_sub(&tmp2, &tmp1, pos) );
             if( d < min ) {
                 *result = tmp1;

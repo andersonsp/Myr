@@ -97,6 +97,7 @@ Vec* vec_cross( Vec* r, Vec* a, Vec* b ) {
 
 Vec* vec_normalize( Vec* r, Vec* a ) {
     float mag = vec_len(a);
+    if( mag == 0 ) return r;
     r->x = a->x / mag;
     r->y = a->y / mag;
     r->z = a->z / mag;

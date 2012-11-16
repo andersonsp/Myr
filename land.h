@@ -98,7 +98,7 @@ void tex_font_render( TexFont *fnt, char *str );
 Model* model_load( const char *filename );
 void model_destroy( Model* mdl );
 void model_draw( Model* mdl, float frame );
-int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result );
+int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
 // collision.c - low level collission functions
@@ -124,8 +124,8 @@ void world_add_object(World *self, Object *object);
 Object *object_new( Vec pos, Model *mdl );
 void object_draw( Object *self );
 void world_draw( World *self, Object *camera );
-int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result );
-Object *world_collision( World *self, Vec* pos, Vec* dir, Vec *result );
+int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result );
+Object *world_collision( World *self, Vec* pos, Vec* dir, float radius, Vec *result );
 
 void object_move( Object *o, float x, float y, float z );
 void object_turn( Object *o, float a );

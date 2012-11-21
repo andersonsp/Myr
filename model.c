@@ -286,10 +286,10 @@ void model_draw( Model *mdl, float frame ){
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 
-#define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision
-#define MIN_FRACTION    (0.0005f) // at least 0.5% movement along the direction vector
+#define DIST_EPSILON    (0.01f)
+#define MIN_FRACTION    (0.0005f)
 
-int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result ) {
+int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *end, Vec* intersect ) {
     int i, j;
     TraceInfo ti;
     trace_init( &ti, pos, dir, radius );
@@ -307,13 +307,18 @@ int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result )
     }
     if( ti.collision ) {
         if( radius > 0.0f ) {
-            // Vec norm;
-            // vec_normalize( &norm, vec_sub(&norm, &ti.start, &ti.intersect_point) );
-            // float t = ti.t + DIST_EPSILON/vec_dot( &norm, &ti.vel );
-            // if( t < MIN_FRACTION ) t = .0f;
-            vec_add( result, &ti.start, vec_scale( result, &ti.vel, ti.t) );
+            Vec norm;
+            // we'll' move close but not to the exact point
+            vec_normalize( &norm, vec_sub(&norm, &ti.start, &ti.intersect_point) );
+            float t = ti.t + DIST_EPSILON/vec_dot( &norm, &ti.vel );
+            if( t < MIN_FRACTION ) t = .0f;
+            vec_add( end, &ti.start, vec_scale(end, &ti.vel, t) );
+
+            // shift intersection point, to account we aren't moving to the exact point we should
+            vec_add( intersect, &ti.intersect_point, vec_scale(&norm, &norm, DIST_EPSILON) );
         } else {
-            *result = ti.intersect_point;
+            *end = ti.intersect_point;
+            *intersect = ti.intersect_point;
         }
         return 1;
     }

@@ -49,6 +49,51 @@ static Vec x_axis = {1.0f, 0.0f, 0.0f},
     y_axis = {0.0f, 1.0f, 0.0f},
     neg_z_axis = {0.0f, 0.0f, -1.0f};
 
+static Object* collide_and_slide( World* world, Vec* pos, Vec* dir, float radius, Vec *result ) {
+    Object* col = NULL;
+    float very_close_distance = 0.00005f;
+    Vec intersect, end, tmp_pos = *pos, tmp_vel = *dir;
+    Vec destination, new_pos;
+
+    // do we need to worry?
+    int collision_recurse = 0;
+    while( collision_recurse < 5 ){
+        col = world_collision( world, &tmp_pos, &tmp_vel, radius, &end, &intersect );
+        if( !col ) {
+            vec_add( result, &tmp_pos, &tmp_vel );
+            break;
+        }
+        vec_add( &destination, &tmp_pos, &tmp_vel );
+        new_pos = tmp_pos;
+
+        Vec norm, new_destination, new_vel;
+        // determine sliding plane
+        vec_normalize( &norm, vec_sub(&norm, &new_pos, &intersect) );
+        float plane_d = -(norm.x*intersect.x+norm.y*intersect.y+norm.z*intersect.z);
+
+        // signed distance to plane
+        float dist = vec_dot( &destination, &norm ) + plane_d;
+        vec_sub( &new_destination, &destination, vec_scale(&norm, &norm, dist) );
+
+        // Generate the slide vector, which will become our new velocity vector for the next iteration
+        vec_sub( &new_vel, &new_destination, &intersect );
+
+        if( vec_len(&new_vel) < very_close_distance) {
+            *result = new_pos;
+            break;
+        }
+
+        tmp_pos = new_pos;
+        tmp_vel = new_vel;
+
+        collision_recurse++;
+    }
+
+    return col;
+}
+
+
+
 //
 // Entities
 //
@@ -81,25 +126,25 @@ void player_ai(Player *self) {
     object_turn( o, g_radians(xm) );
     object_pitch( o, g_radians(ym) );
 
-    Vec pos;
-    Object *col = world_collision( world, &orig, &dir, 3.0f, &pos );
-    if( col ) {
-        // collide & slide
-        o->pos = pos;
-    }
+    // Vec pos, intersect;
+    // Object *col = world_collision( world, &orig, &dir, 3.0f, &pos, &intersect );
+    Object *col = collide_and_slide( world, &orig, &dir, 2.0f, &o->pos );
 
     // Ground collision.
     // TODO: Jumping
     Vec forward, down = {0, -1, 0};
-    col = world_collision(world, &o->pos, &down, 3.0f, &self->footpoint);
+    // col = collide_and_slide( world, &o->pos, &down, 3.0f, &o->pos );
+    col = world_collision( world, &o->pos, &down, 2.0f, &self->footpoint, NULL );
     if( col ) {
         o->pos = self->footpoint;
+        // g_debug_str("pos: %f %f %f \n", o->pos.x, o->pos.y, o->pos.z );
+        // g_debug_str("int: %f %f %f \n", intersect.x, intersect.y, intersect.z );
     } else {// uh oh - fell out of level
-        if (o->pos.y > -100) o->pos.y--;
+        if( o->pos.y > -100 ) o->pos.y--;
     }
 
     quat_vec_mul( &forward, &o->rot, &neg_z_axis );
-    self->hit = world_collision( world, &o->pos, &forward, 0.0f, &self->hitpoint );
+    self->hit = world_collision( world, &o->pos, &forward, 0.0f, &self->hitpoint, NULL );
 }
 
 

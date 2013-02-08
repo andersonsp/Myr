@@ -103,12 +103,12 @@ void player_ai(Player *self) {
 
     // Ground collision.
     // TODO: Jumping
-    Vec forward, down = {0, -1, 0}, fall_delta = {0, 2, 0};
+    Vec forward, down = {0, -1, 0}, fall_delta = {0, 4, 0};
     col = world_collision(world, &o->pos, &down, &self->footpoint);
     if( col ) {
         Vec diff;
         vec_sub( &diff, &self->footpoint, &o->pos );
-        if ( vec_dot(&diff, &diff) < 9.0 ) {
+        if ( vec_dot(&diff, &diff) < 25.0 ) {
             vec_add( &o->pos, &self->footpoint, &fall_delta );
         } else { // fall down
             o->pos.y -= 0.5;
@@ -174,15 +174,15 @@ void g_initialize( int width, int height, void *data ) {
     world_add_object( world, landscape );
 
     player = player_new();
+
+    glBindBuffer( GL_ARRAY_BUFFER, 0 );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
 }
 
 void g_render( void *data ) {
     glEnable( GL_TEXTURE_2D );
     // glDisable(GL_TEXTURE_2D);
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
-    glEnable(GL_COLOR_MATERIAL);
     glEnable(GL_CULL_FACE);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -195,37 +195,10 @@ void g_render( void *data ) {
     glLoadIdentity();
     apply_camera( player->object );
 
-
-    GLfloat ambient[] = { 0, 0, 0, 1.0 };
-    GLfloat emission[] = { 0.0, 0.0, 0.0, 1.0 };
-    GLfloat specular[] = { 0, 0, 0, 0 };
-
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emission);
-    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, specular);
-    glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 1);
-
-    glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
-
-
-    glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE);
-    glLightModeli(GL_LIGHT_MODEL_COLOR_CONTROL, GL_SINGLE_COLOR);
-    glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
-
-    GLfloat lightpos[] = { 5, 5, 5, 1 };
-    GLfloat diffuse[] = { 1, 1, 1, 1.0 };
-
-    glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
-    glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
-
-
     stats_drawn_objects = 0;
     Object *o = player->object;
     world_draw( world, o );
 
-    glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
 

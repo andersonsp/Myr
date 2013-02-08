@@ -27,7 +27,7 @@ struct _Font {
 // Rigth now it uses only the fixed function pipeline
 // in the future a streaming VBO will be used if available
 //
-TexFont* tex_font_new (char *filename){
+TexFont* tex_font_new( char *filename ){
 
     Font_header header; // to retrieve the header of the font
     TexFont* fnt;
@@ -37,7 +37,7 @@ TexFont* tex_font_new (char *filename){
     //Open font file
     char filepath[256];
     sprintf( filepath, "data/fonts/%s", filename );
-    if ( !(filein = fopen(filepath, "rb")) ) return NULL;
+    if( !(filein = fopen(filepath, "rb")) ) return NULL;
 
     fread( &header, sizeof(Font_header), 1, filein );
     if( strncmp(header.id, "SFNT", 4) != 0 || header.version != 3 ){
@@ -47,7 +47,7 @@ TexFont* tex_font_new (char *filename){
     }
 
     fnt = (TexFont*) malloc( sizeof(TexFont) + sizeof(Glyph)*(header.end - header.start) );
-    if(!fnt) return NULL;
+    if( !fnt ) return NULL;
 
     pixels = g_new( unsigned char, header.tex_w*header.tex_h );
     if( !pixels ){
@@ -75,19 +75,19 @@ void tex_font_render ( TexFont *fnt, char *str ){
     if(!fnt) return;
 
     int x = 0, y = 0, c;
-    glBindTexture(GL_TEXTURE_2D, fnt->tex);
-    glBegin(GL_QUADS);
-    while (*str) {
-      if (*str >= fnt->start && *str < fnt->end) {
-         c = *str - fnt->start;
-         glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y0 );
-         glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y1 );
-         glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y1 );
-         glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y0 );
+    glBindTexture( GL_TEXTURE_2D, fnt->tex );
+    glBegin( GL_QUADS );
+    while( *str ) {
+        if( *str >= fnt->start && *str < fnt->end ) {
+            c = *str - fnt->start;
+            glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y0 );
+            glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y1 );
+            glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y1 );
+            glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y0 );
 
-         x += fnt->glyph[ c ].advance;
-      }
-      ++str;
+            x += fnt->glyph[ c ].advance;
+        }
+        ++str;
     }
     glEnd();
 }
@@ -134,24 +134,24 @@ int texture_load( Texture *tex, const char* filename ) {
 
     // Read pixel data from file
     if( type == 10 || type == 11 ) {
-      int i, size;
-      GLubyte packet_header, rgba[4];
-      GLubyte *ptr = pix;
+        int i, size;
+        GLubyte packet_header, rgba[4];
+        GLubyte *ptr = pix;
 
-      while (ptr < pix + pixsize) {
-        packet_header = (GLubyte)fgetc (tga_file); // Read first byte
-        size = 1 + (packet_header & 0x7f);
+        while( ptr < pix + pixsize ) {
+            packet_header = (GLubyte) fgetc( tga_file ); // Read first byte
+            size = 1 + (packet_header & 0x7f);
 
-        if (packet_header & 0x80) { // Run-length packet
-          fread (rgba, sizeof (GLubyte), bytes_per_pixel, tga_file);
-          for (i = 0; i < size; ++i, ptr += bytes_per_pixel)
-            for( k = 0; k < bytes_per_pixel; k++ ) ptr[k] = rgba[k];
-
-        } else { // Non run-length packet
-          for (i = 0; i < size; ++i, ptr += bytes_per_pixel)
-            fread (ptr, sizeof (GLubyte), bytes_per_pixel, tga_file);
+            if (packet_header & 0x80) { // Run-length packet
+                fread (rgba, sizeof (GLubyte), bytes_per_pixel, tga_file);
+                for( i = 0; i < size; ++i, ptr += bytes_per_pixel ) {
+                    for( k = 0; k < bytes_per_pixel; k++ ) ptr[k] = rgba[k];
+                }
+            } else { // Non run-length packet
+                for( i = 0; i < size; ++i, ptr += bytes_per_pixel )
+                    fread( ptr, sizeof (GLubyte), bytes_per_pixel, tga_file );
+            }
         }
-      }
     } else {
         fread( pix, pixsize, 1, tga_file );
     }
@@ -170,18 +170,18 @@ int texture_load( Texture *tex, const char* filename ) {
     }
 
     if( 1-((imageinfo >> 5) & 1) ) {  //tga inverted (code from stb_image.c)
-      for( j = 0; j*2 < height; ++j )   {
-        int index1 = j * width * bytes_per_pixel;
-        int index2 = (height - 1 - j) * width * bytes_per_pixel;
+        for( j = 0; j*2 < height; ++j )   {
+            int index1 = j * width * bytes_per_pixel;
+            int index2 = (height - 1 - j) * width * bytes_per_pixel;
 
-        for( i = width * bytes_per_pixel; i > 0; --i )  {
-          unsigned char temp = pix[index1];
-          pix[index1] = pix[index2];
-          pix[index2] = temp;
-          ++index1;
-          ++index2;
+            for( i = width * bytes_per_pixel; i > 0; --i )  {
+                unsigned char temp = pix[index1];
+                pix[index1] = pix[index2];
+                pix[index2] = temp;
+                ++index1;
+                ++index2;
+            }
         }
-      }
     }
 
     fclose(tga_file);
@@ -208,3 +208,74 @@ error: fclose( tga_file );
       tex->id = 0;
       return 0;
 }
+
+
+GLuint program_load_shader( const GLchar *src, GLenum type ) {
+    GLuint shader;
+    GLint compiled;
+
+    shader = glCreateShader(type);
+    if( shader == 0 ) return 0;
+
+    glShaderSource( shader, 1, &src, 0 );
+    glCompileShader( shader );
+    glGetShaderiv( shader, GL_COMPILE_STATUS, &compiled );
+    if( !compiled ) {
+        GLint len = 0;
+        glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &len );
+
+        if( len > 0 ) {
+            char *err = g_new( char, len );
+            glGetShaderInfoLog( shader, len, 0, err );
+            fprintf( stderr, "error: could not compile shader: %s\n", err );
+            free( err );
+        }
+
+        glDeleteShader(shader);
+        return 0;
+    }
+
+    return shader;
+}
+
+int program_link( Program *program, GLuint vs, GLuint fs, const char **attribs ) {
+    int i;
+    GLint linked;
+
+    program->object = glCreateProgram();
+    if( program->object == 0 ) {
+        fprintf(stderr, "error: could not create program\n");
+        return 0;
+    }
+
+    program->vs = vs;
+    program->fs = fs;
+
+    glAttachShader( program->object, vs );
+    glAttachShader( program->object, fs );
+
+    for( i = 0; attribs[i] != 0; ++i ) {
+        glBindAttribLocation( program->object, i, attribs[i] );
+    }
+
+    glLinkProgram(program->object);
+
+    glGetProgramiv(program->object, GL_LINK_STATUS, &linked);
+    if( !linked ) {
+        GLint len = 0;
+        glGetShaderiv(program->object, GL_INFO_LOG_LENGTH, &len);
+
+        if( len > 0 ) {
+            char *err = g_new( char, len );
+            glGetShaderInfoLog( program->object, len, 0, err );
+            fprintf( stderr, "error: could not link program: %s\n", err );
+            free(err);
+        }
+
+        glDeleteProgram(program->object);
+        return 0;
+    }
+
+    return 1;
+}
+

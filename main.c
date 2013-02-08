@@ -167,8 +167,8 @@ void g_initialize( int width, int height, void *data ) {
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
 
     world = world_new();
-    level_mdl = model_load( "level_concept.iqm" );
-    if( !level_mdl ) g_fatal_error( "couldn't load level_concept.iqm model" );
+    level_mdl = model_load( "castle_map.iqm" );
+    if( !level_mdl ) g_fatal_error( "couldn't load castle_map.iqm model" );
 
     landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl );
     world_add_object( world, landscape );
@@ -177,7 +177,8 @@ void g_initialize( int width, int height, void *data ) {
 }
 
 void g_render( void *data ) {
-    glDisable(GL_TEXTURE_2D);
+    glEnable( GL_TEXTURE_2D );
+    // glDisable(GL_TEXTURE_2D);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
@@ -226,6 +227,7 @@ void g_render( void *data ) {
 
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_2D);
 
     // render crosshair
     if( player->hit ) {
@@ -309,6 +311,10 @@ void g_update( unsigned int milliseconds, void *data ) {
         counter++;
     }
 }
+
+
+
+
 
 int g_handle_event( GEvent *event, void *data ) {
     switch( event->type ){

@@ -41,6 +41,10 @@ typedef struct { float x,y,z,w;  } Vec4;
 typedef struct { float x,y,z,w;  } Quat;
 
 typedef struct {
+    GLuint vs, fs, object;
+} Program;
+
+typedef struct {
     GLuint id, bpp;
     GLint width, height;
 } Texture;
@@ -93,6 +97,8 @@ int texture_load( Texture *tex, const char* filename );
 TexFont* tex_font_new (char *filename);
 void tex_font_render( TexFont *fnt, char *str );
 // destroy with g_free();
+GLuint program_load_shader( const GLchar *src, GLenum type );
+int program_link( Program *program, GLuint vs, GLuint fs, const char **attribs );
 
 // model.c
 Model* model_load( const char *filename );

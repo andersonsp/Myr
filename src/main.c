@@ -1,6 +1,26 @@
 #include "land.h"
 
 
+char* vs_glsl = "attribute vec3 coord3d; \n"
+"attribute vec2 texcoord;\n"
+"varying vec2 f_texcoord;\n"
+"uniform mat4 mvp;\n"
+"void main(void) {\n"
+"  gl_Position = mvp * vec4(coord3d, 1.0);\n"
+"  f_texcoord = texcoord;\n"
+"}\n";
+
+char* fs_glsl = "varying vec2 f_texcoord;\n"
+"uniform sampler2D mytexture;\n"
+"void main(void) { \n"
+"  vec2 flipped_texcoord = vec2(f_texcoord.x, 1.0 - f_texcoord.y); \n"
+"  gl_FragColor = texture2D(mytexture, flipped_texcoord);\n"
+"}";
+
+
+
+
+
 // #define MONSTER_COUNT 33
 // #define PARTICLE_COUNT 33
 
@@ -154,17 +174,11 @@ void g_initialize( int width, int height, void *data ) {
     glCullFace(GL_BACK);
     glFrontFace(GL_CW);
 
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
     mat4_persp( &persp, 60.0f, ar, 0.2f, 1000.0f );
-    glMultMatrixf( persp.m );
-
-    glMatrixMode(GL_MODELVIEW);
-
     mat4_ortho( &ortho, width, height, 0.0f, 1.0f );
 
-    fnt = tex_font_new( "dejavu16.sfn" );
-    if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
+    // fnt = tex_font_new( "dejavu16.sfn" );
+    // if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
 
     world = world_new();
     level_mdl = model_load( "castle_map.iqm" );
@@ -199,6 +213,7 @@ void g_render( void *data ) {
     Object *o = player->object;
     world_draw( world, o );
 
+/*
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
 
@@ -272,6 +287,7 @@ void g_render( void *data ) {
     // // g_font_render( fnt, buffer );
 
     glEnable( GL_DEPTH_TEST );
+*/
 }
 
 void g_update( unsigned int milliseconds, void *data ) {

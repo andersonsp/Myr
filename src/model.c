@@ -211,11 +211,11 @@ static int loadiqmmeshes( Model *mdl, const char *filename, const iqmheader *hdr
 
     glGenBuffers( 1, &mdl->vbo );
     glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
-    glBufferData( GL_ARRAY_BUFFER, sizeof(IqmVertex), mdl->verts, GL_STATIC_DRAW);
+    glBufferData( GL_ARRAY_BUFFER, mdl->num_verts * sizeof(IqmVertex), mdl->verts, GL_STATIC_DRAW);
 
     glGenBuffers( 1, &mdl->ibo );
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, sizeof(IqmTriangle), &mdl->tris, GL_STATIC_DRAW);
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, mdl->num_tris * sizeof(IqmTriangle), &mdl->tris, GL_STATIC_DRAW);
 
     return 1;
 }
@@ -223,7 +223,7 @@ static int loadiqmmeshes( Model *mdl, const char *filename, const iqmheader *hdr
 //TODO: add a resource manager for this assets
 Model* model_load( const char *filename ) {
     char filepath[256];
-    sprintf( filepath, "data/models/%s", filename );
+    sprintf( filepath, "../data/models/%s", filename );
 
     FILE *f = fopen(filepath, "rb");
     if(!f) return NULL;
@@ -274,44 +274,44 @@ void model_destroy( Model *mdl ){
 void model_draw( Model *mdl, float frame ){
     // animateiqm( mdl, frame );
 
-    // IqmVertex* v = mdl->verts; //(mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
-    // glVertexPointer(3, GL_FLOAT, sizeof(IqmVertex), &v[0].loc );
+    IqmVertex* v = mdl->verts; //(mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
+    glVertexPointer(3, GL_FLOAT, sizeof(IqmVertex), &v[0].loc );
 
 
-    // glNormalPointer( GL_FLOAT, sizeof(IqmVertex), &v[0].normal );
-    // glTexCoordPointer(2, GL_FLOAT, sizeof(IqmVertex), &mdl->verts[0].texcoord );
+    glNormalPointer( GL_FLOAT, sizeof(IqmVertex), &v[0].normal );
+    glTexCoordPointer(2, GL_FLOAT, sizeof(IqmVertex), &mdl->verts[0].texcoord );
 
-    // glEnableClientState( GL_VERTEX_ARRAY );
-    // glEnableClientState(GL_NORMAL_ARRAY);
-    // glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
 
-    // int i;
-    // for( i = 0; i < mdl->num_meshes; i++ ) {
-    //   IqmMesh *m = &mdl->meshes[i];
-    //   if( mdl->textures[i] ) glBindTexture( GL_TEXTURE_2D, mdl->textures[i] );
-    //   glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, &mdl->tris[m->first_triangle] );
-    // }
+    int i;
+    for( i = 0; i < mdl->num_meshes; i++ ) {
+      IqmMesh *m = &mdl->meshes[i];
+      if( mdl->textures[i] ) glBindTexture( GL_TEXTURE_2D, mdl->textures[i] );
+      glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, &mdl->tris[m->first_triangle] );
+    }
 
-    // glDisableClientState(GL_VERTEX_ARRAY);
-    // glDisableClientState(GL_NORMAL_ARRAY);
-    // glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
-    glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
+    // glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
 
-    glEnableVertexAttribArray( 0 ); // loc
-    glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
-    glEnableVertexAttribArray( 1 ); // norm
-    glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
-    glEnableVertexAttribArray( 2 ); // tex
-    glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
+    // glEnableVertexAttribArray( 0 ); // loc
+    // glEnableVertexAttribArray( 1 ); // norm
+    // glEnableVertexAttribArray( 2 ); // tex
+    // glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
+    // glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
+    // glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
 
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
-    glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
-    glDrawElements( GL_TRIANGLES, 3*mdl->meshes[0].num_triangles, GL_UNSIGNED_SHORT, NULL );
+    // glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
+    // glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
+    // glDrawElements( GL_TRIANGLES, 3*mdl->meshes[0].num_triangles, GL_UNSIGNED_SHORT, NULL );
 
-    glDisableVertexAttribArray( 0 );
-    glDisableVertexAttribArray( 1 );
-    glDisableVertexAttribArray( 2 );
+    // // glDisableVertexAttribArray( 0 );
+    // // glDisableVertexAttribArray( 1 );
+    // // glDisableVertexAttribArray( 2 );
 }
 
 

@@ -36,7 +36,7 @@ TexFont* tex_font_new( char *filename ){
 
     //Open font file
     char filepath[256];
-    sprintf( filepath, "data/fonts/%s", filename );
+    sprintf( filepath, "../data/fonts/%s", filename );
     if( !(filein = fopen(filepath, "rb")) ) return NULL;
 
     fread( &header, sizeof(Font_header), 1, filein );
@@ -103,7 +103,7 @@ int texture_load( Texture *tex, const char* filename ) {
     unsigned char buf[ 18 ];
 
     char filepath[256];
-    sprintf( filepath, "data/textures/%s", filename );
+    sprintf( filepath, "../data/textures/%s", filename );
 
     tga_file = fopen( filepath, "rb" );
     if( tga_file == NULL ) return 0;

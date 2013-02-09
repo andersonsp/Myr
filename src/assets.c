@@ -238,21 +238,18 @@ GLuint program_load_shader( const GLchar *src, GLenum type ) {
     return shader;
 }
 
-int program_link( Program *program, GLuint vs, GLuint fs, const char **attribs ) {
+int program_link( Program *program, const char **attribs ) {
     int i;
     GLint linked;
 
     program->object = glCreateProgram();
     if( program->object == 0 ) {
-        fprintf(stderr, "error: could not create program\n");
+        g_debug_str( "error: could not create program\n");
         return 0;
     }
 
-    program->vs = vs;
-    program->fs = fs;
-
-    glAttachShader( program->object, vs );
-    glAttachShader( program->object, fs );
+    glAttachShader( program->object, program->vs );
+    glAttachShader( program->object, program->fs );
 
     for( i = 0; attribs[i] != 0; ++i ) {
         glBindAttribLocation( program->object, i, attribs[i] );
@@ -268,7 +265,7 @@ int program_link( Program *program, GLuint vs, GLuint fs, const char **attribs )
         if( len > 0 ) {
             char *err = g_new( char, len );
             glGetShaderInfoLog( program->object, len, 0, err );
-            fprintf( stderr, "error: could not link program: %s\n", err );
+            g_debug_str( "error: could not link program: %s\n", err );
             free(err);
         }
 

@@ -47,6 +47,18 @@ void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v ) {
     m[15] = 1;
 }
 
+void mat4_mul( Mat4 *out, Mat4 *m1, Mat4 *m2 ) {
+  Mat4 temp1, temp2;
+  int i,j;
+  if( m1 == out ){ temp1 = *m1; m1 = &temp1; }
+  if( m2 == out ){ temp2 = *m2; m2 = &temp2; }
+
+  float *r = (float*) out->m, *m = (float*) m1->m, *n = (float*) m2->m;
+  for (j=0; j < 4; ++j)
+    for (i=0; i < 4; ++i)
+       r[4*j+i] = m[i]*n[4*j] + m[4+i]*n[4*j+1] + m[8+i]*n[4*j+2] + m[12+i]*n[4*j+3];
+}
+
 void mat4_ortho( Mat4 *mat, float w, float h, float n, float f ) {
     mat4_identity( mat );
     float *m = mat->m;
@@ -97,6 +109,7 @@ Vec* vec_cross( Vec* r, Vec* a, Vec* b ) {
 
 Vec* vec_normalize( Vec* r, Vec* a ) {
     float mag = vec_len(a);
+    if( mag == 0 ) return r;
     r->x = a->x / mag;
     r->y = a->y / mag;
     r->z = a->z / mag;

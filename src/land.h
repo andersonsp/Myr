@@ -42,6 +42,8 @@ typedef struct { float x,y,z,w;  } Quat;
 
 typedef struct {
     GLuint vs, fs, object;
+    GLint u_mvp, u_sampler; // uniforms
+    GLint a_pos, a_normal, a_tex; // attribs
 } Program;
 
 typedef struct {
@@ -58,9 +60,11 @@ typedef struct {
 
 typedef struct {
     Model *model;
+    Program program;
     float rr; //squared radius
     Vec pos;
     Quat rot;
+
 
     int hits;
 } Object;
@@ -72,6 +76,7 @@ typedef struct {
 
 //math.c
 void mat4_identity( Mat4 *mat );
+void mat4_mul( Mat4 *out, Mat4 *m1, Mat4 *m2 );
 void mat4_ortho( Mat4 *mat, float width, float height, float znear, float zfar );
 void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar );
 void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v );
@@ -98,13 +103,13 @@ TexFont* tex_font_new (char *filename);
 void tex_font_render( TexFont *fnt, char *str );
 // destroy with g_free();
 GLuint program_load_shader( const GLchar *src, GLenum type );
-int program_link( Program *program, GLuint vs, GLuint fs, const char **attribs );
+int program_link( Program *program, const char **attribs );
 
 // model.c
 Model* model_load( const char *filename );
 void model_destroy( Model* mdl );
-void model_draw( Model* mdl, float frame );
-int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result );
+void model_draw( Model* mdl, Program* program, Mat4* mvp, float frame );
+int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
 // collision.c - low level collission functions
@@ -125,14 +130,13 @@ int ray_intersects_ellipsoid( Vec* origin, Vec* dir, Vec* center, Vec* ellips );
 int ellipsoid_intersects_ellipsoid( Vec* center1, Vec* ellips1, Vec* center2, Vec* ellips2 );
 
 // world.c
-World *world_new(void);
-void world_add_object(World *self, Object *object);
-Object *object_new( Vec pos, Model *mdl );
-void object_draw( Object *self );
-void world_draw( World *self, Object *camera );
-int object_collision( Object *o, Vec* pos, Vec* dir, Vec *result );
-Object *world_collision( World *self, Vec* pos, Vec* dir, Vec *result );
+World *world_new( void );
+void world_add_object( World *self, Object *object );
+void world_draw( World *self, Object *camera, Mat4* projection );
+Object *world_collision( World *self, Vec* pos, Vec* dir, float radius, Vec *result );
 
+Object *object_new( Vec pos, Model *mdl, Program* program );
+void object_draw( Object *self, Mat4 *view, Mat4* projection );
 void object_move( Object *o, float x, float y, float z );
 void object_turn( Object *o, float a );
 void object_pitch( Object *o, float a );
@@ -140,10 +144,9 @@ void object_yaw( Object *o, float a );
 void object_roll( Object *o, float a );
 Vec* object_transform( Vec* r, Vec* a, Object* o );
 Vec* object_back_transform( Vec* r, Vec* a, Object* o );
+int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result );
 
-void apply_camera( Object *o );
-void apply_orientation( Object *o );
-
+void object_get_view( Mat4* view, Object *o );
 // octree.c
 
 // camera.c

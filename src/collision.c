@@ -2,6 +2,13 @@
 
 // Much of this was taken from the paper "Improved Collision detection and Response" by Kasper Fauerby
 // http://www.peroxide.dk/papers/collision/collision.pdf
+//
+// end:
+//    vec_add( end, &trace->start, vec_scale(&tmp, &trace->vel, trace->t) );
+//
+// dist:
+//    vec_len( vec_scale(&tmp, &trace->vel, trace->t) );
+
 
 static int get_lowest_root( float a, float b, float c, float max_r, float* root ) {
     // Check if a solution exists
@@ -153,7 +160,7 @@ void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 ) {
             t0 = temp;
         }
         // Check that at least one result is within range:
-        if (t0 > 1.0 || t1 < 0.0) return; // No collision possible
+        if( t0 > 1.0 || t1 < 0.0 ) return; // No collision possible
 
         // Clamp to [0,1]
         if( t0 < 0.0 ) t0 = 0.0;
@@ -249,14 +256,4 @@ void trace_init( TraceInfo* trace, Vec* start, Vec* vel, float radius ){
         vec_scale( &trace->scaled_start, &trace->start, trace->inv_radius );
         vec_scale( &trace->scaled_vel, &trace->vel, trace->inv_radius );
     }
-}
-
-void trace_end( TraceInfo* trace, Vec* end ){
-    Vec tmp;
-    vec_add( end, &trace->start, vec_scale(&tmp, &trace->vel, trace->t) );
-}
-
-float trace_dist( TraceInfo* trace ) {
-    Vec tmp;
-    return vec_len( vec_scale(&tmp, &trace->vel, trace->t) );
 }

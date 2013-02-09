@@ -1,24 +1,26 @@
 #include "land.h"
 
 
-char* vs_glsl = "attribute vec3 coord3d; \n"
-"attribute vec2 texcoord;\n"
-"varying vec2 f_texcoord;\n"
-"uniform mat4 mvp;\n"
-"void main(void) {\n"
-"  gl_Position = mvp * vec4(coord3d, 1.0);\n"
-"  f_texcoord = texcoord;\n"
-"}\n";
+GLchar* vs_glsl =
+    "uniform mat4 mvp;"
+    "attribute vec3 pos;\n"
+    "attribute vec3 normal;\n"
+    "attribute vec2 tex;\n"
+    "varying vec2 tex_fs;\n"
+    "varying vec4 norm_fs;\n"
+    "void main() {\n"
+    "    gl_Position = mvp*vec4(pos, 1.0);\n"
+    "    norm_fs = vec4(normal, 1.0);\n"
+    "    tex_fs = tex;\n"
+    "}\n";
 
-char* fs_glsl = "varying vec2 f_texcoord;\n"
-"uniform sampler2D mytexture;\n"
-"void main(void) { \n"
-"  vec2 flipped_texcoord = vec2(f_texcoord.x, 1.0 - f_texcoord.y); \n"
-"  gl_FragColor = texture2D(mytexture, flipped_texcoord);\n"
-"}";
-
-
-
+GLchar* fs_glsl =
+    "varying vec2 tex_fs;\n"
+    "varying vec4 norm_fs;\n"
+    "uniform sampler2D sampler;\n"
+    "void main() {\n"
+    "    gl_FragColor = texture2D( sampler, tex_fs );\n"
+    "}\n";
 
 
 // #define MONSTER_COUNT 33
@@ -76,13 +78,12 @@ int key_pressed[GK_KEY_MAX] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 Player *player_new(void) {
     Player *self = g_new0(Player, 1);
-    self->object = object_new( (Vec){ .0, .0, .0}, NULL );
+    self->object = object_new( (Vec){ .0, 5.0, .0}, NULL, NULL );
     self->health = 1;
     return self;
 }
 
 void player_ai(Player *self) {
-    int i;
     Object *o = self->object;
     float kx = .0f, ky = .0f, kz = .0f;
     int xm = 0, ym = 0;
@@ -95,50 +96,32 @@ void player_ai(Player *self) {
     if( key_pressed[GK_UP]    ) ym = 1.0f;
     if( key_pressed[GK_DOWN]  ) ym = -1.0f;
 
+    Vec dir, orig = o->pos;
     object_move( o, kx, ky, kz );
+    vec_sub( &dir, &o->pos, &orig );
 
     object_turn( o, g_radians(xm) );
     object_pitch( o, g_radians(ym) );
 
-    Object *col;
     Vec pos;
-    Vec dir[6];
-    quat_vec_mul( &dir[0], &o->rot, &x_axis );
-    dir[1] = y_axis;
-    vec_cross( &dir[2], &dir[0], &dir[1] );
-    vec_scale( &dir[3], &dir[0], -1.0 );
-    vec_scale( &dir[4], &dir[1], -1.0 );
-    vec_scale( &dir[5], &dir[2], -1.0 );
-    // Push away from nearby geometry.
-    for( i = 0; i < 6; i++ ) {
-        col = world_collision( world, &o->pos, &dir[i], &pos );
-        if( col ) {
-            Vec diff, s_dir;
-            vec_sub( &diff, &pos, &o->pos );
-            if( vec_dot(&diff, &diff) < 1 ) {
-                vec_add( &o->pos, &pos, vec_scale(&s_dir, &dir[i], -1) );
-            }
-        }
+    Object *col = world_collision( world, &orig, &dir, 3.0f, &pos );
+    if( col ) {
+        // collide & slide
+        o->pos = pos;
     }
 
     // Ground collision.
     // TODO: Jumping
-    Vec forward, down = {0, -1, 0}, fall_delta = {0, 4, 0};
-    col = world_collision(world, &o->pos, &down, &self->footpoint);
+    Vec forward, down = {0, -1, 0};
+    col = world_collision(world, &o->pos, &down, 3.0f, &self->footpoint);
     if( col ) {
-        Vec diff;
-        vec_sub( &diff, &self->footpoint, &o->pos );
-        if ( vec_dot(&diff, &diff) < 25.0 ) {
-            vec_add( &o->pos, &self->footpoint, &fall_delta );
-        } else { // fall down
-            o->pos.y -= 0.5;
-        }
+        o->pos = self->footpoint;
     } else {// uh oh - fell out of level
         if (o->pos.y > -100) o->pos.y--;
     }
 
     quat_vec_mul( &forward, &o->rot, &neg_z_axis );
-    self->hit = world_collision( world, &o->pos, &forward, &self->hitpoint );
+    self->hit = world_collision( world, &o->pos, &forward, 0.0f, &self->hitpoint );
 }
 
 
@@ -171,7 +154,7 @@ void g_initialize( int width, int height, void *data ) {
     glEnable( GL_BLEND );
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+    // glCullFace(GL_BACK);
     glFrontFace(GL_CW);
 
     mat4_persp( &persp, 60.0f, ar, 0.2f, 1000.0f );
@@ -184,7 +167,32 @@ void g_initialize( int width, int height, void *data ) {
     level_mdl = model_load( "castle_map.iqm" );
     if( !level_mdl ) g_fatal_error( "couldn't load castle_map.iqm model" );
 
-    landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl );
+
+    Program p;
+    p.vs = program_load_shader( vs_glsl, GL_VERTEX_SHADER );
+    p.fs = program_load_shader( fs_glsl, GL_FRAGMENT_SHADER );
+    if( !p.vs || !p.fs ) g_fatal_error( "Shader compilation failed\n" );
+
+    const char *attribs[] = { "pos", "normal", "tex", 0 };
+    if( !program_link(&p, attribs) ) g_fatal_error( "Shader link failed\n" );
+
+    p.a_pos = glGetAttribLocation( p.object, "pos" );
+    if( p.a_pos == -1 ) g_fatal_error( "Could not bind attribute pos\n" );
+
+    p.a_normal = glGetAttribLocation( p.object, "normal" );
+    if( p.a_normal == -1 ) g_fatal_error( "Could not bind attribute normal\n" );
+
+    p.a_tex = glGetAttribLocation( p.object, "tex" );
+    if( p.a_tex == -1 ) g_fatal_error( "Could not bind attribute tex\n" );
+
+    p.u_mvp = glGetUniformLocation( p.object, "mvp" );
+    if( p.u_mvp == -1) g_fatal_error( "Could not bind uniform mvp\n" );
+
+    p.u_sampler = glGetUniformLocation( p.object, "sampler" );
+    if( p.u_sampler == -1) g_fatal_error( "Could not bind uniform sampler\n" );
+
+
+    landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl, &p );
     world_add_object( world, landscape );
 
     player = player_new();
@@ -195,23 +203,14 @@ void g_initialize( int width, int height, void *data ) {
 
 void g_render( void *data ) {
     glEnable( GL_TEXTURE_2D );
-    // glDisable(GL_TEXTURE_2D);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
+    glEnable( GL_DEPTH_TEST );
+    glEnable( GL_CULL_FACE );
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glColor4f(1, 1, 1, 1);
-
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glMultMatrixf( persp.m );
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    apply_camera( player->object );
+    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
     stats_drawn_objects = 0;
     Object *o = player->object;
-    world_draw( world, o );
+    world_draw( world, o, &persp );
 
 /*
     glDisable(GL_DEPTH_TEST);

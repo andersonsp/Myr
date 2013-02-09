@@ -215,7 +215,7 @@ static int loadiqmmeshes( Model *mdl, const char *filename, const iqmheader *hdr
 
     glGenBuffers( 1, &mdl->ibo );
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, mdl->num_tris * sizeof(IqmTriangle), &mdl->tris, GL_STATIC_DRAW);
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, mdl->num_tris * sizeof(IqmTriangle), mdl->tris, GL_STATIC_DRAW);
 
     return 1;
 }
@@ -271,54 +271,42 @@ void model_destroy( Model *mdl ){
 }
 
 //TODO: add support for normals and normal mapping
-void model_draw( Model *mdl, float frame ){
+void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
     // animateiqm( mdl, frame );
 
-    IqmVertex* v = mdl->verts; //(mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
-    glVertexPointer(3, GL_FLOAT, sizeof(IqmVertex), &v[0].loc );
+    glUseProgram( program->object );
+    glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
 
+    glEnableVertexAttribArray( program->a_pos );
+    glEnableVertexAttribArray( program->a_normal );
+    glEnableVertexAttribArray( program->a_tex );
+    glVertexAttribPointer( program->a_pos, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
+    glVertexAttribPointer( program->a_normal, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
+    glVertexAttribPointer( program->a_tex, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
 
-    glNormalPointer( GL_FLOAT, sizeof(IqmVertex), &v[0].normal );
-    glTexCoordPointer(2, GL_FLOAT, sizeof(IqmVertex), &mdl->verts[0].texcoord );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
 
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glEnableClientState(GL_NORMAL_ARRAY);
-    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    glActiveTexture( GL_TEXTURE0 );
+    glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
+    glUniform1i( program->u_sampler, /*GL_TEXTURE*/0);
 
-    int i;
-    for( i = 0; i < mdl->num_meshes; i++ ) {
-      IqmMesh *m = &mdl->meshes[i];
-      if( mdl->textures[i] ) glBindTexture( GL_TEXTURE_2D, mdl->textures[i] );
-      glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, &mdl->tris[m->first_triangle] );
-    }
+    glUniformMatrix4fv( program->u_mvp, 1, GL_FALSE, mvp->m );
 
-    glDisableClientState(GL_VERTEX_ARRAY);
-    glDisableClientState(GL_NORMAL_ARRAY);
-    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    IqmMesh *m = &mdl->meshes[0];
+    glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, (GLvoid*)(m->first_triangle*sizeof(IqmTriangle)) );
 
-    // glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
-
-    // glEnableVertexAttribArray( 0 ); // loc
-    // glEnableVertexAttribArray( 1 ); // norm
-    // glEnableVertexAttribArray( 2 ); // tex
-    // glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
-    // glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
-    // glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
-
-    // glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
-    // glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
-    // glDrawElements( GL_TRIANGLES, 3*mdl->meshes[0].num_triangles, GL_UNSIGNED_SHORT, NULL );
-
-    // // glDisableVertexAttribArray( 0 );
-    // // glDisableVertexAttribArray( 1 );
-    // // glDisableVertexAttribArray( 2 );
+    glDisableVertexAttribArray( program->a_pos );
+    glDisableVertexAttribArray( program->a_normal );
+    glDisableVertexAttribArray( program->a_tex );
 }
 
+#define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision
+#define MIN_FRACTION    (0.0005f) // at least 0.5% movement along the direction vector
 
-int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
+int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result ) {
     int i, j;
     TraceInfo ti;
-    trace_init( &ti, pos, dir, 0.0f );
+    trace_init( &ti, pos, dir, radius );
     for( i = 0; i < mdl->num_meshes; i++ ) {
         IqmMesh* m = &mdl->meshes[i];
         for( j=m->first_triangle; j<m->num_triangles; j++ ) {
@@ -327,11 +315,20 @@ int model_collision( Model *mdl, Vec* pos, Vec* dir, Vec *result ) {
             p3 = mdl->verts[mdl->tris[j].vertex[0]].loc;
             p2 = mdl->verts[mdl->tris[j].vertex[1]].loc;
             p1 = mdl->verts[mdl->tris[j].vertex[2]].loc;
-            trace_ray_triangle(&ti, &p1, &p2, &p3);
+            if( radius > 0.0f ) trace_sphere_triangle(&ti, &p1, &p2, &p3);
+            else trace_ray_triangle(&ti, &p1, &p2, &p3);
         }
     }
     if( ti.collision ) {
-        *result = ti.intersect_point;
+        if( radius > 0.0f ) {
+            // Vec norm;
+            // vec_normalize( &norm, vec_sub(&norm, &ti.start, &ti.intersect_point) );
+            // float t = ti.t + DIST_EPSILON/vec_dot( &norm, &ti.vel );
+            // if( t < MIN_FRACTION ) t = .0f;
+            vec_add( result, &ti.start, vec_scale( result, &ti.vel, ti.t) );
+        } else {
+            *result = ti.intersect_point;
+        }
         return 1;
     }
     return 0;

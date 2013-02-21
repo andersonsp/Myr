@@ -79,6 +79,32 @@ void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar ) 
     m[14] = 2.0f*zfar*znear/(znear - zfar);
 }
 
+void mat4_look_at( Mat4 *mat, Vec *eye, Vec *target, Vec *up ) {
+    Vec x_vec, y_vec, z_vec;
+    float *m = mat->m;
+
+    vec_normalize( &z_vec, vec_sub(&z_vec, eye, target) );
+    vec_normalize( &x_vec, vec_cross(&x_vec, up, &z_vec) );
+    vec_normalize( &y_vec, vec_cross(&y_vec, &z_vec, &x_vec) );
+
+    m[0] = x_vec.x;
+    m[1] = y_vec.x;
+    m[2] = z_vec.x;
+    m[3] = 0;
+    m[4] = x_vec.y;
+    m[5] = y_vec.y;
+    m[6] = z_vec.y;
+    m[7] = 0;
+    m[8] = x_vec.z;
+    m[9] = y_vec.z;
+    m[10] = z_vec.z;
+    m[11] = 0;
+    m[12] = -vec_dot( &x_vec, eye );
+    m[13] = -vec_dot( &y_vec, eye );
+    m[14] = -vec_dot( &z_vec, eye );
+    m[15] = 1;
+}
+
 Vec* vec_add( Vec* r, Vec* a, Vec* b ) {
     r->x = a->x + b->x;
     r->y = a->y + b->y;
@@ -204,4 +230,28 @@ Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v ) {
     r->y = temp.y;
     r->z = temp.z;
     return r;
+}
+
+Quat* quat_from_mat4( Quat* q, Mat4* mat ) {
+    q->x = 1 + mat->m[0] - mat->m[5] - mat->m[10];
+    if( q->x < 0 ) q->x = 0;
+    else q->x = (float) sqrt(q->x)/2;
+
+    q->y = 1 - mat->m[0] + mat->m[5] - mat->m[10];
+    if( q->y < 0 ) q->y = 0;
+    else q->y = (float) sqrt(q->y)/2;
+
+    q->z = 1 - mat->m[0] - mat->m[5] + mat->m[10];
+    if( q->z < 0 ) q->z = 0;
+    else q->z = (float) sqrt(q->z)/2;
+
+    q->w = 1 + mat->m[0] + mat->m[5] + mat->m[10];
+    if( q->w < 0 ) q->w = 0;
+    else q->w = (float) sqrt(q->w)/2;
+
+    if( mat->m[6] - mat->m[9] < 0 ) q->x = -q->x;
+    if( mat->m[8] - mat->m[2] < 0 ) q->y = -q->y;
+    if( mat->m[1] - mat->m[4] < 0 ) q->z = -q->z;
+
+    return q;
 }

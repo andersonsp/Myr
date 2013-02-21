@@ -20,19 +20,19 @@
 #define g_degrees( x ) ((x*180)/G_PI)
 
 #define g_new(struct_type, n_structs)   \
-((struct_type *) malloc (( sizeof (struct_type)) * (n_structs)))
+( (struct_type *) malloc((sizeof(struct_type)) * (n_structs)) )
 
-#define g_new0(struct_type, n_structs)    \
-((struct_type *) calloc ((n_structs), ( sizeof (struct_type))))
+#define g_new0(struct_type, n_structs) \
+( (struct_type *) calloc((n_structs), (sizeof(struct_type))) )
 
 #define g_renew(struct_type, mem, n_structs)  \
-((struct_type *) realloc ((mem), (sizeof (struct_type)) * (n_structs)))
+( (struct_type *) realloc((mem), (sizeof(struct_type)) * (n_structs)) )
 
 #define g_free( pointer ) free( pointer )
 
-
 //
-
+//math.c
+//
 typedef struct { float m[16];    } Mat4;
 typedef struct { float x, y, z;  } Vec;
 typedef struct { short s, t;     } Vec2s;
@@ -40,45 +40,11 @@ typedef struct { float s, t;     } Vec2;
 typedef struct { float x,y,z,w;  } Vec4;
 typedef struct { float x,y,z,w;  } Quat;
 
-typedef struct {
-    GLuint vs, fs, object;
-    GLint u_mvp, u_sampler; // uniforms
-    GLint a_pos, a_normal, a_tex; // attribs
-} Program;
-
-typedef struct {
-    GLuint id, bpp;
-    GLint width, height;
-} Texture;
-typedef struct _Font TexFont;
-typedef struct _Model Model;
-
-typedef struct {
-    Vec4 plane[6];
-    float fovy, aspect, znear, zfar;
-} Frustum;
-
-typedef struct {
-    Model *model;
-    Program program;
-    float rr; //squared radius
-    Vec pos;
-    Quat rot;
-
-
-    int hits;
-} Object;
-
-typedef struct {
-    int on;
-    Object **o;
-} World;
-
-//math.c
 void mat4_identity( Mat4 *mat );
 void mat4_mul( Mat4 *out, Mat4 *m1, Mat4 *m2 );
 void mat4_ortho( Mat4 *mat, float width, float height, float znear, float zfar );
 void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar );
+void mat4_look_at( Mat4 *mat, Vec *eye, Vec *target, Vec *up );
 void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v );
 
 Vec* vec_add( Vec* r, Vec* a, Vec* b );
@@ -94,25 +60,44 @@ Quat* quat_invert( Quat *r, Quat *q );
 Quat* quat_normalize( Quat *r, Quat *q );
 Quat* quat_mul( Quat *r, Quat *q1, Quat *q2 );
 Quat* quat_from_axis_angle( Quat *q, Vec *axis, float ang );
+Quat* quat_from_mat4( Quat* q, Mat4* m );
 Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v );
 
+//
 // assets.c
+//
+typedef struct _Font TexFont;
+typedef struct {
+    GLuint id, bpp;
+    GLint width, height;
+} Texture;
+
+typedef struct {
+    GLuint vs, fs, object;
+    GLint u_mvp, u_sampler; // uniforms
+    GLint a_pos, a_normal, a_tex; // attribs
+} Program;
+
 int texture_load( Texture *tex, const char* filename );
-// destroy with glDeleteTex()
 TexFont* tex_font_new (char *filename);
 void tex_font_render( TexFont *fnt, char *str );
-// destroy with g_free();
 GLuint program_load_shader( const GLchar *src, GLenum type );
 int program_link( Program *program, const char **attribs );
 
+//
 // model.c
+//
+typedef struct _Model Model;
+
 Model* model_load( const char *filename );
 void model_destroy( Model* mdl );
 void model_draw( Model* mdl, Program* program, Mat4* mvp, float frame );
 int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
 
+//
 // collision.c - low level collission functions
+//
 typedef struct {
     Vec start, scaled_start, intersect_point;
     Vec vel, scaled_vel, norm_vel;
@@ -126,33 +111,58 @@ float trace_dist( TraceInfo* trace );
 void trace_sphere_triangle( TraceInfo* trace, Vec* p0, Vec* p1, Vec* p2 );
 void trace_ray_triangle( TraceInfo* trace, Vec* v0, Vec* v1, Vec* v2 );
 
-int ray_intersects_ellipsoid( Vec* origin, Vec* dir, Vec* center, Vec* ellips );
-int ellipsoid_intersects_ellipsoid( Vec* center1, Vec* ellips1, Vec* center2, Vec* ellips2 );
+//
+// Camera handling (based on http://dhporware.com TPS camera tutorial)
+//
+typedef struct {
+    int spring_system; // set to 0 to disable the spring system
+    Mat4 view, projection;
 
+    float spring, damping, offset;  //for the spring system
+    float heading, pitch;
+
+    Vec eye, target, target_up, velocity;
+    Quat orientation;
+} Camera;
+
+typedef struct {
+    Vec4 plane[6];
+    float fovy, aspect, znear, zfar;
+} Frustum;
+
+void camera_init( Camera* cam );
+void camera_look_at( Camera* cam, Vec *eye, Vec *target, Vec *up);
+void camera_update( Camera* cam, int millis );
+
+//
 // world.c
+//
+typedef struct {
+    Model *model;
+    Program program;
+    float rr; //squared radius
+    Vec pos;
+    Quat rot;
+
+    int hits;
+    int type;
+} Object;
+
+typedef struct {
+    int on;
+    Object **o;
+} World;
+
 World *world_new( void );
 void world_add_object( World *self, Object *object );
-void world_draw( World *self, Object *camera, Mat4* projection );
+void world_draw( World *self, Camera *camera );
 Object *world_collision( World *self, Vec* pos, Vec* dir, float radius, Vec *result );
 
 Object *object_new( Vec pos, Model *mdl, Program* program );
-void object_draw( Object *self, Mat4 *view, Mat4* projection );
-void object_move( Object *o, float x, float y, float z );
-void object_turn( Object *o, float a );
-void object_pitch( Object *o, float a );
-void object_yaw( Object *o, float a );
-void object_roll( Object *o, float a );
+void object_draw( Object* self, Camera* camera );
 Vec* object_transform( Vec* r, Vec* a, Object* o );
 Vec* object_back_transform( Vec* r, Vec* a, Object* o );
 int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result );
-
-void object_get_view( Mat4* view, Object *o );
-// octree.c
-
-// camera.c
-void camera_init( Object* cam, int type );
-void camera_update_tps( Object* cam, Vec* target, float yaw, float pitch );
-void camera_view( Object* cam, Mat4* view );
 
 
 // ===============================================================

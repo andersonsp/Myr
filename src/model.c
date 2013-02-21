@@ -204,7 +204,7 @@ static int loadiqmmeshes( Model *mdl, const char *filename, const iqmheader *hdr
         g_debug_str("%s: loaded mesh: %s\n", filename, &str[m->name]);
 
         mdl->textures[i] = texture_load( &tex, &str[m->material] );
-        if( mdl->textures[i] ) g_debug_str("%s: loaded material: %s\n", filename, &str[m->material]);
+        if( mdl->textures[i] ) g_debug_str("%s: loaded material: %d[%d] %s\n", filename, mdl->textures[i], i, &str[m->material]);
         else g_debug_str("%s: couldn't load material: %s\n", filename, &str[m->material]);
     }
 

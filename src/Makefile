@@ -7,7 +7,7 @@ CC = gcc
 CFLAGS	= -Wall -O2 -I..
 LDFLAGS = -lm
 
-OBJS	= main.o math.o world.o model.o assets.o collision.o
+OBJS	= main.o math.o world.o model.o assets.o collision.o camera.o
 
 all : 	linux
 

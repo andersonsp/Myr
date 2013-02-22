@@ -82,7 +82,7 @@ void player_ai(Player *self, int millis) {
     Quat rot;
 
     vec_scale( &s_orient, &orient, millis/1000.0 );
-    if( rot.y != 0.0f) {
+    if( orient.y != 0.0f) {
         quat_from_axis_angle( &rot, &y_axis, s_orient.y );
 
         // if( kz < 0 ) quat_invert( &rot, &rot );

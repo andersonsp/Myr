@@ -9,7 +9,7 @@ void mat4_identity( Mat4 *mat ) {
 }
 
 
-void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v ) {
+void mat4_from_quat_vec( Mat4 *mat, const Quat *q, const Vec *v ) {
     float *m = mat->m;
     float x2    = 2 * q->x;
     float qx2_2 = x2 * q->x;
@@ -47,7 +47,7 @@ void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v ) {
     m[15] = 1;
 }
 
-void mat4_mul( Mat4 *out, Mat4 *m1, Mat4 *m2 ) {
+void mat4_mul( Mat4 *out, const Mat4 *m1, const Mat4 *m2 ) {
   Mat4 temp1, temp2;
   int i,j;
   if( m1 == out ){ temp1 = *m1; m1 = &temp1; }
@@ -79,7 +79,7 @@ void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar ) 
     m[14] = 2.0f*zfar*znear/(znear - zfar);
 }
 
-void mat4_look_at( Mat4 *mat, Vec *eye, Vec *target, Vec *up ) {
+void mat4_look_at( Mat4 *mat, const Vec *eye, const Vec *target, const Vec *up ) {
     Vec x_vec, y_vec, z_vec;
     float *m = mat->m;
 
@@ -105,35 +105,35 @@ void mat4_look_at( Mat4 *mat, Vec *eye, Vec *target, Vec *up ) {
     m[15] = 1;
 }
 
-Vec* vec_add( Vec* r, Vec* a, Vec* b ) {
+Vec* vec_add( Vec* r, const Vec* a, const Vec* b ) {
     r->x = a->x + b->x;
     r->y = a->y + b->y;
     r->z = a->z + b->z;
     return r;
 }
 
-Vec* vec_sub( Vec* r, Vec* a, Vec* b ) {
+Vec* vec_sub( Vec* r, const Vec* a, const Vec* b ) {
     r->x = a->x - b->x;
     r->y = a->y - b->y;
     r->z = a->z - b->z;
     return r;
 }
 
-Vec* vec_scale( Vec* r, Vec* a, float s ) {
+Vec* vec_scale( Vec* r, const Vec* a, float s ) {
     r->x = a->x * s;
     r->y = a->y * s;
     r->z = a->z * s;
     return r;
 }
 
-Vec* vec_cross( Vec* r, Vec* a, Vec* b ) {
+Vec* vec_cross( Vec* r, const Vec* a, const Vec* b ) {
     r->x = a->y * b->z - a->z * b->y;
     r->y = a->z * b->x - a->x * b->z;
     r->z = a->x * b->y - a->y * b->x;
     return r;
 }
 
-Vec* vec_normalize( Vec* r, Vec* a ) {
+Vec* vec_normalize( Vec* r, const Vec* a ) {
     float mag = vec_len(a);
     if( mag == 0 ) return r;
     r->x = a->x / mag;
@@ -142,16 +142,16 @@ Vec* vec_normalize( Vec* r, Vec* a ) {
     return r;
 }
 
-float vec_dot( Vec* a, Vec* b ) {
+float vec_dot( const Vec* a, const Vec* b ) {
     return a->x*b->x + a->y*b->y + a->z*b->z;
 }
 
-float vec_len( Vec* a ) {
+float vec_len( const Vec* a ) {
     return (float) sqrt( a->x*a->x + a->y*a->y + a->z*a->z );
 }
 
 // Rotate a around b by angle, store in result.
-Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle ) {
+Vec* vec_rotate( Vec* r, const Vec* a, const Vec* b, float angle ) {
     float c = cosf(angle);
     float s = sinf(angle);
 
@@ -180,7 +180,7 @@ Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle ) {
 }
 
 
-Quat* quat_invert( Quat *r, Quat *q ) {
+Quat* quat_invert( Quat *r, const Quat *q ) {
     r->x = -q->x;
     r->y = -q->y;
     r->z = -q->z;
@@ -188,7 +188,7 @@ Quat* quat_invert( Quat *r, Quat *q ) {
     return r;
 }
 
-Quat* quat_normalize( Quat *r, Quat *q ) {
+Quat* quat_normalize( Quat *r, const Quat *q ) {
     float d = (float) sqrt(q->x*q->x + q->y*q->y + q->z*q->z + q->w*q->w);
     if (d >= 0.00001f) {
         d = 1/d;
@@ -202,7 +202,7 @@ Quat* quat_normalize( Quat *r, Quat *q ) {
     return r;
 }
 
-Quat* quat_mul( Quat *r, Quat *q1, Quat *q2 ) {
+Quat* quat_mul( Quat *r, const Quat *q1, const Quat *q2 ) {
     Quat temp;
     if (r == q1) { temp = *q1; q1 = &temp; }
     if (r == q2) { temp = *q2; q2 = &temp; }
@@ -214,13 +214,13 @@ Quat* quat_mul( Quat *r, Quat *q1, Quat *q2 ) {
     return r;
 }
 
-Quat* quat_from_axis_angle( Quat *q, Vec *axis, float ang ) {
+Quat* quat_from_axis_angle( Quat *q, const Vec *axis, float ang ) {
     q->w = (float) cos(ang/2);
     vec_scale( (Vec*) q, axis, (float) sin(ang/2) );
     return q;
 }
 
-Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v ) {
+Vec* quat_vec_mul( Vec *r, const Quat *q, const Vec *v ) {
     Quat qvec = { v->x, v->y, v->z, 0 };
     Quat qinv = { -q->x, -q->y, -q->z, q->w };
     Quat temp;
@@ -232,7 +232,7 @@ Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v ) {
     return r;
 }
 
-Quat* quat_from_mat4( Quat* q, Mat4* mat ) {
+Quat* quat_from_mat4( Quat* q, const Mat4* mat ) {
     q->x = 1 + mat->m[0] - mat->m[5] - mat->m[10];
     if( q->x < 0 ) q->x = 0;
     else q->x = (float) sqrt(q->x)/2;

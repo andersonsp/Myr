@@ -134,12 +134,12 @@ int main(int argc, char** argv) {
     if( conf.flags & GC_CORE_PROFILE ) {
         GLXContext tempContext = glXCreateContext(dpy, visinfo, NULL, True);
         PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribs = (PFNGLXCREATECONTEXTATTRIBSARBPROC)glXGetProcAddress((GLubyte*)"glXCreateContextAttribsARB");
-        if (!glXCreateContextAttribs)
-            g_fatal_error("Your platform does not support OpenGL 3.0.\nTry setting forward_compatible_gl to FALSE.\n");
+        if( !glXCreateContextAttribs )
+            g_fatal_error("Your platform does not support OpenGL 3.0.\nTry removing GC_CORE_PROFILE flag.\n");
 
         int fbcount = 0;
         GLXFBConfig *framebufferConfig = glXChooseFBConfig(dpy, screen, 0, &fbcount);
-        if (!framebufferConfig) {
+        if( !framebufferConfig ) {
             g_fatal_error("Can't create a framebuffer for OpenGL 3.0.\n");
         } else {
             int attribs[] = {

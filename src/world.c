@@ -28,23 +28,24 @@ Object *object_new( Vec pos, Model *mdl, Program* program ) {
     return self;
 }
 
-void object_draw( Object *self, Camera *camera ) {
-    Mat4 model, modelview, mvp;
+void object_draw( Object *self, Mat4* vp ) {
+    Mat4 model, mvp;
     mat4_from_quat_vec( &model, &self->rot, &self->pos );
-    mat4_mul( &modelview, &camera->view, &model );
-    mat4_mul( &mvp, &camera->projection, &modelview );
+    mat4_mul( &mvp, vp, &model );
 
     model_draw( self->model, &self->program, &mvp, 0 );
 }
 
 void world_draw( World *self, Camera *camera ) {
     int i;
+    Mat4 vp;
+    mat4_mul( &vp, &camera->projection, &camera->view );
     for( i = 0; i < self->on; i++ ) {
         Object *o = self->o[i];
         // frustum culling here
         // portal rendering here ??
 
-        if( o->model && o->program.object ) object_draw( o, camera );
+        if( o->model && o->program.object ) object_draw( o, &vp );
     }
 }
 

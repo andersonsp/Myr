@@ -3,46 +3,35 @@
 #define DEFAULT_SPRING  1.0f;
 #define DEFAULT_DAMPING 26.0f;
 
-Vec zero   = { 0.0, 0.0, 0.0 };
-Vec x_axis = { 1.0, 0.0, 0.0 };
-Vec y_axis = { 0.0, 1.0, 0.0 };
-Vec z_axis = { 0.0, 0.0, 1.0 };
-
 void camera_init( Camera* cam ) {
   if(!cam) return;
 
   mat4_identity( &cam->view );
   mat4_identity( &cam->projection );
-  cam->orientation = (Quat){0.0f, 0.0f, 0.0f, 1.0f}; // quat identity
-  cam->target_up = y_axis;
-
-  cam->eye = zero;
-  cam->target = zero;
+  cam->pos = zero;
+  cam->up = y_axis;
   cam->velocity = zero;
+  cam->rot = (Quat){0.0f, 0.0f, 0.0f, 1.0f}; // quat identity
 
   cam->spring  = DEFAULT_SPRING;
   cam->damping = DEFAULT_DAMPING;
   cam->offset  = 0.0;
-  cam->heading = 0.0;
-  cam->pitch   = 0.0;
   cam->spring_system = 1;
 }
 
-void camera_look_at( Camera* cam, Vec *eye, Vec *target, Vec *up) {
-    cam->eye = *eye;
-    cam->target = *target;
-    cam->target_up = *up;
+void camera_look_at( Camera* cam, const Vec *eye, const Vec *target, const Vec *up) {
+    cam->pos = *eye;
+    cam->up = *up;
 
     mat4_look_at( &cam->view, eye, target, up );
-    quat_from_mat4( &cam->orientation, &cam->view );
+    quat_from_mat4( &cam->rot, &cam->view );
 
     Vec offset;
-    vec_sub( &offset, target, eye );
-    cam->offset = vec_len( &offset );
+    cam->offset = vec_len( vec_sub(&offset, target, eye) );
 }
 
-static void update_view_absolute( Camera* cam ) {
-    mat4_from_quat_vec( &cam->view, &cam->orientation, &zero );
+static void update_view_absolute( Camera* cam, const Vec* target ) {
+    mat4_from_quat_vec( &cam->view, &cam->rot, &zero );
 
     Vec x_vec = { cam->view.m[0], cam->view.m[4], cam->view.m[8] };
     Vec y_vec = { cam->view.m[1], cam->view.m[5], cam->view.m[9] };
@@ -50,15 +39,15 @@ static void update_view_absolute( Camera* cam ) {
 
     Vec tmp;
     vec_scale( &tmp, &z_vec, cam->offset );
-    vec_add( &cam->eye, &cam->target, &tmp );
+    vec_add( &cam->pos, target, &tmp );
 
-    cam->view.m[12] = -vec_dot( &x_vec, &cam->eye );
-    cam->view.m[13] = -vec_dot( &y_vec, &cam->eye );
-    cam->view.m[14] = -vec_dot( &z_vec, &cam->eye );
+    cam->view.m[12] = -vec_dot( &x_vec, &cam->pos );
+    cam->view.m[13] = -vec_dot( &y_vec, &cam->pos );
+    cam->view.m[14] = -vec_dot( &z_vec, &cam->pos );
 }
 
-static void update_view_timed( Camera* cam, float millis ) {
-    mat4_from_quat_vec( &cam->view, &cam->orientation, &zero );
+static void update_view_timed( Camera* cam, const Vec* target, float millis ) {
+    mat4_from_quat_vec( &cam->view, &cam->rot, &zero );
     Vec z_vec = { cam->view.m[2], cam->view.m[6], cam->view.m[10] };
 
     // Calculate the new camera position. The 'idealPosition' is where the
@@ -74,8 +63,8 @@ static void update_view_timed( Camera* cam, float millis ) {
 
     Vec tmp, ideal_pos, displacement, spring_accel;
     vec_scale( &tmp, &z_vec, cam->offset );
-    vec_add( &ideal_pos, &cam->target, &tmp );
-    vec_sub( &displacement, &cam->eye, &ideal_pos );
+    vec_add( &ideal_pos, target, &tmp );
+    vec_sub( &displacement, &cam->pos, &ideal_pos );
 
 //Vector3 springAcceleration = (-m_springConstant * displacement) - (m_dampingConstant * m_velocity);
     vec_scale( &displacement, &displacement, -cam->spring );
@@ -88,7 +77,7 @@ static void update_view_timed( Camera* cam, float millis ) {
 
 //m_eye += m_velocity * elapsedTimeSec;
     vec_scale( &tmp, &cam->velocity, millis/1000.0 );
-    vec_add( &cam->eye, &cam->eye, &cam->velocity );
+    vec_add( &cam->pos, &cam->pos, &cam->velocity );
 
     // The view matrix is always relative to the camera's current position
     // 'm_eye'. Since a spring system is being used here 'm_eye' will be
@@ -99,28 +88,27 @@ static void update_view_timed( Camera* cam, float millis ) {
     // to recompute these axes so that they're relative to 'm_eye'. Once
     // that's done we can use those axes to reconstruct the view matrix.
 
-    mat4_look_at( &cam->view, &cam->eye, &cam->target, &cam->target_up );
+    mat4_look_at( &cam->view, &cam->pos, target, &cam->up );
 }
 
-void camera_update( Camera* cam, int millis ) {
+void camera_update( Camera* cam, const Vec* target, float pitch, float heading, int millis ) {
     if( !cam ) return;
     // update Orientation for the elapsed milliseconds
-    cam->pitch   *= millis/1000.0;
-    cam->heading *= millis/1000.0;
+    pitch   *= millis/1000.0;
+    heading *= millis/1000.0;
 
     Quat rot;
-    if( cam->heading != 0.0f ) {
-        quat_from_axis_angle( &rot, &cam->target_up, cam->heading );
-        quat_mul( &cam->orientation, &cam->orientation, &rot );
+    if( heading != 0.0f ) {
+        quat_from_axis_angle( &rot, &cam->up, heading );
+        quat_mul( &cam->rot, &cam->rot, &rot );
     }
-    if( cam->pitch != 0.0f ) {
-        quat_from_axis_angle( &rot, &x_axis, cam->pitch );
-        quat_mul( &cam->orientation, &rot, &cam->orientation );
+    if( pitch != 0.0f ) {
+        quat_from_axis_angle( &rot, &x_axis, pitch );
+        quat_mul( &cam->rot, &rot, &cam->rot );
     }
-    if( cam->heading != 0.0f || cam->pitch != 0.0f )
-        quat_normalize( &cam->orientation, &cam->orientation );
+    if( heading != 0.0f || pitch != 0.0f ) quat_normalize( &cam->rot, &cam->rot );
 
     // update the view matrix
-    if( cam->spring_system ) update_view_timed( cam, millis );
-    else update_view_absolute( cam );
+    if( cam->spring_system ) update_view_timed( cam, target, millis );
+    else update_view_absolute( cam, target );
 }

@@ -6,7 +6,7 @@ typedef struct {
     int tex_w, tex_h;
     int start, end;
     int avgh, avgw;
-}Font_header;
+} Font_header;
 
 typedef struct {
     float u0, v0;
@@ -142,14 +142,14 @@ int texture_load( Texture *tex, const char* filename ) {
             packet_header = (GLubyte) fgetc( tga_file ); // Read first byte
             size = 1 + (packet_header & 0x7f);
 
-            if (packet_header & 0x80) { // Run-length packet
+            if( packet_header & 0x80 ) { // Run-length packet
                 fread (rgba, sizeof (GLubyte), bytes_per_pixel, tga_file);
                 for( i = 0; i < size; ++i, ptr += bytes_per_pixel ) {
                     for( k = 0; k < bytes_per_pixel; k++ ) ptr[k] = rgba[k];
                 }
             } else { // Non run-length packet
                 for( i = 0; i < size; ++i, ptr += bytes_per_pixel )
-                    fread( ptr, sizeof (GLubyte), bytes_per_pixel, tga_file );
+                    fread( ptr, sizeof(GLubyte), bytes_per_pixel, tga_file );
             }
         }
     } else {
@@ -255,21 +255,20 @@ int program_link( Program *program, const char **attribs ) {
         glBindAttribLocation( program->object, i, attribs[i] );
     }
 
-    glLinkProgram(program->object);
-
-    glGetProgramiv(program->object, GL_LINK_STATUS, &linked);
+    glLinkProgram( program->object );
+    glGetProgramiv( program->object, GL_LINK_STATUS, &linked );
     if( !linked ) {
         GLint len = 0;
-        glGetShaderiv(program->object, GL_INFO_LOG_LENGTH, &len);
+        glGetShaderiv( program->object, GL_INFO_LOG_LENGTH, &len );
 
         if( len > 0 ) {
             char *err = g_new( char, len );
             glGetShaderInfoLog( program->object, len, 0, err );
             g_debug_str( "error: could not link program: %s\n", err );
-            free(err);
+            free( err );
         }
 
-        glDeleteProgram(program->object);
+        glDeleteProgram( program->object );
         return 0;
     }
 

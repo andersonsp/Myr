@@ -277,12 +277,12 @@ void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
     glUseProgram( program->object );
     glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
 
-    glEnableVertexAttribArray( program->a_pos );
-    glEnableVertexAttribArray( program->a_normal );
-    glEnableVertexAttribArray( program->a_tex );
-    glVertexAttribPointer( program->a_pos, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
-    glVertexAttribPointer( program->a_normal, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
-    glVertexAttribPointer( program->a_tex, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
+    glEnableVertexAttribArray( 0 ); // pos
+    glEnableVertexAttribArray( 1 ); // normal
+    glEnableVertexAttribArray( 2 ); // tex uv
+    glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)0 );
+    glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)12 );
+    glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, sizeof(IqmVertex), (GLvoid *)24 );
 
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
 
@@ -295,9 +295,9 @@ void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
     IqmMesh *m = &mdl->meshes[0];
     glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, (GLvoid*)(m->first_triangle*sizeof(IqmTriangle)) );
 
-    glDisableVertexAttribArray( program->a_pos );
-    glDisableVertexAttribArray( program->a_normal );
-    glDisableVertexAttribArray( program->a_tex );
+    glDisableVertexAttribArray( 0 );
+    glDisableVertexAttribArray( 1 );
+    glDisableVertexAttribArray( 2 );
 }
 
 #define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision

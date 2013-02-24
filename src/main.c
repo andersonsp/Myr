@@ -25,8 +25,6 @@ GLchar* fs_glsl =
     "    gl_FragColor = texture2D( sampler, tex_fs );\n"
     "}\n";
 
-extern int stats_drawn_objects;
-
 typedef struct {
     Object *object;
     Object *hit;
@@ -46,11 +44,6 @@ Mat4 ortho;
 TexFont* fnt;
 
 Vec eye = { 0.0, 2.0, 4.0 };
-
-static Vec x_axis = {1.0f, 0.0f, 0.0f},
-    y_axis = {0.0f, 1.0f, 0.0f},
-    z_axis = {0.0f, 0.0f, 1.0f},
-    neg_z_axis = {0.0f, 0.0f, -1.0f};
 
 //
 // Entities
@@ -79,10 +72,10 @@ void player_ai(Player *self, int millis) {
 
     Vec speed = {kx, ky, kz};
     Vec s_orient, orient = {g_radians(ym), g_radians(xm), 0.0f};
-    Quat rot;
 
-    vec_scale( &s_orient, &orient, millis/1000.0 );
     if( orient.y != 0.0f) {
+        Quat rot;
+        vec_scale( &s_orient, &orient, millis/1000.0 );
         quat_from_axis_angle( &rot, &y_axis, s_orient.y );
 
         // if( kz < 0 ) quat_invert( &rot, &rot );
@@ -118,11 +111,11 @@ void player_ai(Player *self, int millis) {
     //
     // TPS Camera
     // TODO: move this code somewhere else
-    main_cam.target = o->pos;
-    main_cam.heading = -orient.y; //( kz < 0 ? orient.y : -orient.y );
-    main_cam.pitch = orient.x;
+    // main_cam.target = o->pos;
+    // main_cam.heading = -orient.y; //( kz < 0 ? orient.y : -orient.y );
+    // main_cam.pitch = orient.x;
 
-    camera_update( &main_cam, millis );
+    camera_update( &main_cam, &o->pos, orient.x, -orient.y, millis );
 }
 
 
@@ -174,21 +167,11 @@ void g_initialize( int width, int height, void *data ) {
     const char *attribs[] = { "pos", "normal", "tex", 0 };
     if( !program_link(&p, attribs) ) g_fatal_error( "Shader link failed\n" );
 
-    p.a_pos = glGetAttribLocation( p.object, "pos" );
-    if( p.a_pos == -1 ) g_fatal_error( "Could not bind attribute pos\n" );
-
-    p.a_normal = glGetAttribLocation( p.object, "normal" );
-    if( p.a_normal == -1 ) g_fatal_error( "Could not bind attribute normal\n" );
-
-    p.a_tex = glGetAttribLocation( p.object, "tex" );
-    if( p.a_tex == -1 ) g_fatal_error( "Could not bind attribute tex\n" );
-
     p.u_mvp = glGetUniformLocation( p.object, "mvp" );
     if( p.u_mvp == -1) g_fatal_error( "Could not bind uniform mvp\n" );
 
     p.u_sampler = glGetUniformLocation( p.object, "sampler" );
     if( p.u_sampler == -1) g_fatal_error( "Could not bind uniform sampler\n" );
-
 
 
     fnt = tex_font_new( "dejavu16.sfn" );
@@ -211,7 +194,6 @@ void g_initialize( int width, int height, void *data ) {
     mat4_ortho( &ortho, width, height, 0.0f, 1.0f );
 
     camera_init( &main_cam );
-    main_cam.spring_system = 0;
     mat4_persp( &main_cam.projection, 60.0f, ar, 0.2f, 1000.0f );
     camera_look_at( &main_cam, &eye, &player->object->pos, &y_axis );
 
@@ -223,54 +205,10 @@ void g_render( void *data ) {
     glEnable( GL_TEXTURE_2D );
     glEnable( GL_DEPTH_TEST );
     glEnable( GL_CULL_FACE );
-
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-    stats_drawn_objects = 0;
-    Object *o = player->object;
-
+    // draw 3D scene
     world_draw( world, &main_cam );
-
-/*
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_TEXTURE_2D);
-
-    // render crosshair
-    if( player->hit ) {
-        Vec hitpoint = player->hitpoint;
-        Vec vl, vr, vu, vd, vl2, vr2, vu2, vd2;
-        //until I learn how to do it the right way
-        Vec r, u;
-
-        quat_vec_mul( &r, &o->rot, &x_axis );
-        quat_vec_mul( &u, &o->rot, &y_axis );
-
-        vec_add( &vl, &hitpoint, vec_scale(&vl, &r, 0.9) );
-        vec_sub( &vr, &hitpoint, vec_scale(&vr, &r, 0.9) );
-        vec_add( &vu, &hitpoint, vec_scale(&vu, &u, 0.9) );
-        vec_sub( &vd, &hitpoint, vec_scale(&vd, &u, 0.9) );
-        vec_add( &vl2, &hitpoint, vec_scale(&vl2, &r, 0.4));
-        vec_sub( &vr2, &hitpoint, vec_scale(&vr2, &r, 0.4));
-        vec_add( &vu2, &hitpoint, vec_scale(&vu2, &u, 0.4));
-        vec_sub( &vd2, &hitpoint, vec_scale(&vd2, &u, 0.4));
-
-        glBegin( GL_LINES );
-        glColor4f( 0, 1, 0, 1 );
-            glVertex3f( vl.x, vl.y, vl.z );
-            glVertex3f( vl2.x, vl2.y, vl2.z );
-
-            glVertex3f( vr.x, vr.y, vr.z );
-            glVertex3f( vr2.x, vr2.y, vr2.z );
-
-            glVertex3f( vu.x, vu.y, vu.z );
-            glVertex3f( vu2.x, vu2.y, vu2.z );
-
-            glVertex3f( vd.x, vd.y, vd.z );
-            glVertex3f( vd2.x, vd2.y, vd2.z );
-        glEnd();
-    }
-*/
-
 
     // draw 2D composition layer ( HUD )
     glUseProgram(0);
@@ -302,21 +240,10 @@ void g_render( void *data ) {
     // // sprintf(buffer, "Entities drawn: %d", count);
     // // g_font_render( fnt, buffer );
 
+    Object *o = player->object;
     glTranslatef( 0.0, -15.0, 0.0 );
     sprintf(buffer, "Player loc: %1.3f, %1.3f, %1.3f", o->pos.x, o->pos.y, o->pos.z );
     tex_font_render( fnt, buffer );
-
-    // glTranslatef( 0.0, -15.0, 0.0 );
-    // sprintf(buffer, "Camera loc: %1.3f, %1.3f, %1.3f", camera->pos.x, camera->pos.y, camera->pos.z );
-    // tex_font_render( fnt, buffer );
-
-    // glTranslatef( 0.0, -15.0, 0.0 );
-    // sprintf(buffer, "Camera mat loc: %1.3f, %1.3f, %1.3f", view.m[12], view.m[13], view.m[14] );
-    // tex_font_render( fnt, buffer );
-
-    // // glTranslatef( 0.0, -15.0, 0.0 );
-    // // sprintf(buffer, "Collided entity: %d", collide_entity );
-    // // g_font_render( fnt, buffer );
 
     glEnable( GL_DEPTH_TEST );
 }

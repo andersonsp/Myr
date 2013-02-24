@@ -41,27 +41,33 @@ typedef struct { float x,y,z,w;  } Vec4;
 typedef struct { float x,y,z,w;  } Quat;
 
 void mat4_identity( Mat4 *mat );
-void mat4_mul( Mat4 *out, Mat4 *m1, Mat4 *m2 );
+void mat4_mul( Mat4 *out, const Mat4 *m1, const Mat4 *m2 );
 void mat4_ortho( Mat4 *mat, float width, float height, float znear, float zfar );
 void mat4_persp( Mat4 *mat, float fovy, float aspect, float znear, float zfar );
-void mat4_look_at( Mat4 *mat, Vec *eye, Vec *target, Vec *up );
-void mat4_from_quat_vec( Mat4 *mat, Quat *q, Vec *v );
+void mat4_look_at( Mat4 *mat, const Vec *eye, const Vec *target, const Vec *up );
+void mat4_from_quat_vec( Mat4 *mat, const Quat *q, const Vec *v );
 
-Vec* vec_add( Vec* r, Vec* a, Vec* b );
-Vec* vec_sub( Vec* r, Vec* a, Vec* b );
-Vec* vec_scale( Vec* r, Vec* a, float s );
-Vec* vec_cross( Vec* r, Vec* a, Vec* b );
-Vec* vec_normalize( Vec* r, Vec* a );
-Vec* vec_rotate( Vec* r, Vec* a, Vec* b, float angle );
-float vec_dot( Vec* a, Vec* b );
-float vec_len( Vec* a );
+Vec* vec_add( Vec* r, const Vec* a, const Vec* b );
+Vec* vec_sub( Vec* r, const Vec* a, const Vec* b );
+Vec* vec_scale( Vec* r, const Vec* a, float s );
+Vec* vec_cross( Vec* r, const Vec* a, const Vec* b );
+Vec* vec_normalize( Vec* r, const Vec* a );
+Vec* vec_rotate( Vec* r, const Vec* a, const Vec* b, float angle );
+float vec_dot( const Vec* a, const Vec* b );
+float vec_len( const Vec* a );
 
-Quat* quat_invert( Quat *r, Quat *q );
-Quat* quat_normalize( Quat *r, Quat *q );
-Quat* quat_mul( Quat *r, Quat *q1, Quat *q2 );
-Quat* quat_from_axis_angle( Quat *q, Vec *axis, float ang );
-Quat* quat_from_mat4( Quat* q, Mat4* m );
-Vec* quat_vec_mul( Vec *r, Quat *q, Vec *v );
+Quat* quat_invert( Quat *r, const Quat *q );
+Quat* quat_normalize( Quat *r, const Quat *q );
+Quat* quat_mul( Quat *r, const Quat *q1, const Quat *q2 );
+Quat* quat_from_axis_angle( Quat *q, const Vec *axis, float ang );
+Quat* quat_from_mat4( Quat* q, const Mat4* m );
+Vec* quat_vec_mul( Vec *r, const Quat *q, const Vec *v );
+
+static const Vec zero   = { 0.0, 0.0, 0.0 };
+static const Vec x_axis = { 1.0, 0.0, 0.0 };
+static const Vec y_axis = { 0.0, 1.0, 0.0 };
+static const Vec z_axis = { 0.0, 0.0, 1.0 };
+static const Vec neg_z_axis = {0.0f, 0.0f, -1.0f};
 
 //
 // assets.c
@@ -75,7 +81,6 @@ typedef struct {
 typedef struct {
     GLuint vs, fs, object;
     GLint u_mvp, u_sampler; // uniforms
-    GLint a_pos, a_normal, a_tex; // attribs
 } Program;
 
 int texture_load( Texture *tex, const char* filename );
@@ -119,10 +124,9 @@ typedef struct {
     Mat4 view, projection;
 
     float spring, damping, offset;  //for the spring system
-    float heading, pitch;
 
-    Vec eye, target, target_up, velocity;
-    Quat orientation;
+    Vec pos, up, velocity;
+    Quat rot;
 } Camera;
 
 typedef struct {
@@ -131,8 +135,8 @@ typedef struct {
 } Frustum;
 
 void camera_init( Camera* cam );
-void camera_look_at( Camera* cam, Vec *eye, Vec *target, Vec *up);
-void camera_update( Camera* cam, int millis );
+void camera_look_at( Camera* cam, const Vec *eye, const Vec *target, const Vec *up);
+void camera_update( Camera* cam, const Vec* target, float pitch, float heading, int millis );
 
 //
 // world.c
@@ -159,7 +163,7 @@ void world_draw( World *self, Camera *camera );
 Object *world_collision( World *self, Vec* pos, Vec* dir, float radius, Vec *result );
 
 Object *object_new( Vec pos, Model *mdl, Program* program );
-void object_draw( Object* self, Camera* camera );
+void object_draw( Object* self, Mat4* vp );
 Vec* object_transform( Vec* r, Vec* a, Object* o );
 Vec* object_back_transform( Vec* r, Vec* a, Object* o );
 int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result );

@@ -9,11 +9,8 @@ typedef struct {
 } Font_header;
 
 typedef struct {
-    float u0, v0;
-    float u1, v1;
-
-    float x0, y0;
-    float x1, y1;
+    float u0, v0, u1, v1;
+    float x0, y0, x1, y1;
 
     float advance;
 } Glyph;
@@ -28,32 +25,24 @@ struct _Font {
 // in the future a streaming VBO will be used if available
 //
 TexFont* tex_font_new( char *filename ){
-
-    Font_header header; // to retrieve the header of the font
-    TexFont* fnt;
     FILE* filein;
+    Font_header header;
+    TexFont* fnt = NULL;
     unsigned char * pixels;
 
-    //Open font file
     char filepath[256];
     sprintf( filepath, "../data/fonts/%s", filename );
-    if( !(filein = fopen(filepath, "rb")) ) return NULL;
+    filein = fopen(filepath, "rb");
+    if( !filein ) return NULL;
 
     fread( &header, sizeof(Font_header), 1, filein );
-    if( strncmp(header.id, "SFNT", 4) != 0 || header.version != 3 ){
-        printf("not a valid SFN file: %s\n", filename);
-        fclose(filein);
-        return NULL;
-    }
+    if( strncmp(header.id, "SFNT", 4) != 0 || header.version != 3 ) goto error;
 
     fnt = (TexFont*) malloc( sizeof(TexFont) + sizeof(Glyph)*(header.end - header.start) );
-    if( !fnt ) return NULL;
+    if( !fnt ) goto error;
 
     pixels = g_new( unsigned char, header.tex_w*header.tex_h );
-    if( !pixels ){
-        free(fnt);
-        return NULL;
-    }
+    if( !pixels ) goto error;
 
     fnt->start = header.start;
     fnt->end = header.end;
@@ -67,8 +56,15 @@ TexFont* tex_font_new( char *filename ){
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     g_free( pixels );
-
+    fclose( filein );
     return fnt;
+
+error:
+    g_debug_str( "%s: error while loading\n", filename );
+    if( fnt ) free( fnt );
+    if( pixels ) g_free( pixels );
+    if( filein ) fclose( filein );
+    return NULL;
 }
 
 void tex_font_render ( TexFont *fnt, char *str ){
@@ -128,8 +124,7 @@ int texture_load( Texture *tex, const char* filename ) {
     int bytes_per_pixel = hbpp / 8;     // Bytes per pixel (pixel data - unexpanded)
     pixsize = width * height * bytes_per_pixel;  // Size of pixel data
 
-    // Allocate memory for pixel data
-    pix = (unsigned char *) malloc( pixsize );
+    pix = g_new( unsigned char, pixsize );
     if( !pix ) goto error;
 
     // Read pixel data from file
@@ -169,7 +164,8 @@ int texture_load( Texture *tex, const char* filename ) {
         }
     }
 
-    if( 1-((imageinfo >> 5) & 1) ) {  //tga inverted (code from stb_image.c)
+    // tga inverted (code from stb_image.c)
+    if( 1-((imageinfo >> 5) & 1) ) {
         for( j = 0; j*2 < height; ++j )   {
             int index1 = j * width * bytes_per_pixel;
             int index2 = (height - 1 - j) * width * bytes_per_pixel;
@@ -184,32 +180,34 @@ int texture_load( Texture *tex, const char* filename ) {
         }
     }
 
-    fclose(tga_file);
-
-    GLuint texture;
-    GLuint mode;
+    GLuint texture, mode;
     if( bytes_per_pixel == 1 ) mode = GL_ALPHA;
     else mode = ( bytes_per_pixel == 3 ? GL_RGB : GL_RGBA );
 
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, mode, width, height, 0, mode, GL_UNSIGNED_BYTE, pix);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenTextures( 1, &texture );
+    glBindTexture( GL_TEXTURE_2D, texture );
+    glTexImage2D( GL_TEXTURE_2D, 0, mode, width, height, 0, mode, GL_UNSIGNED_BYTE, pix );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 
     tex->id = texture;
     tex->width = width;
     tex->height = height;
     tex->bpp = bytes_per_pixel;
+
+    fclose( tga_file );
+    g_free( pix );
     return texture;
 
-error: fclose( tga_file );
-      tex->id = 0;
-      return 0;
+error:
+    fclose( tga_file );
+    tex->id = 0;
+    return 0;
 }
 
-
+//
+// Program (Shaders)
+//
 GLuint program_load_shader( const GLchar *src, GLenum type ) {
     GLuint shader;
     GLint compiled;
@@ -239,7 +237,6 @@ GLuint program_load_shader( const GLchar *src, GLenum type ) {
 }
 
 int program_link( Program *program, const char **attribs ) {
-    int i;
     GLint linked;
 
     program->object = glCreateProgram();
@@ -251,6 +248,7 @@ int program_link( Program *program, const char **attribs ) {
     glAttachShader( program->object, program->vs );
     glAttachShader( program->object, program->fs );
 
+    int i;
     for( i = 0; attribs[i] != 0; ++i ) {
         glBindAttribLocation( program->object, i, attribs[i] );
     }
@@ -274,4 +272,3 @@ int program_link( Program *program, const char **attribs ) {
 
     return 1;
 }
-

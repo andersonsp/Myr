@@ -247,11 +247,11 @@ Model* model_load( const char *filename ) {
     free(buf);
     return mdl;
 
-    error:
-    g_fatal_error("%s: error while loading\n", filename);
-    free( buf );
+error:
+    g_debug_str("%s: error while loading\n", filename);
     model_destroy( mdl );
-    fclose(f);
+    free( buf );
+    fclose( f );
     return NULL;
 }
 

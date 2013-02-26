@@ -138,7 +138,7 @@ int texture_load( Texture *tex, const char* filename ) {
             size = 1 + (packet_header & 0x7f);
 
             if( packet_header & 0x80 ) { // Run-length packet
-                fread (rgba, sizeof (GLubyte), bytes_per_pixel, tga_file);
+                fread( rgba, sizeof (GLubyte), bytes_per_pixel, tga_file );
                 for( i = 0; i < size; ++i, ptr += bytes_per_pixel ) {
                     for( k = 0; k < bytes_per_pixel; k++ ) ptr[k] = rgba[k];
                 }
@@ -218,17 +218,16 @@ GLuint program_load_shader( const GLchar *src, GLenum type ) {
     glShaderSource( shader, 1, &src, 0 );
     glCompileShader( shader );
     glGetShaderiv( shader, GL_COMPILE_STATUS, &compiled );
+
     if( !compiled ) {
         GLint len = 0;
         glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &len );
-
         if( len > 0 ) {
             char *err = g_new( char, len );
             glGetShaderInfoLog( shader, len, 0, err );
             fprintf( stderr, "error: could not compile shader: %s\n", err );
             free( err );
         }
-
         glDeleteShader(shader);
         return 0;
     }
@@ -240,10 +239,7 @@ int program_link( Program *program, const char **attribs ) {
     GLint linked;
 
     program->object = glCreateProgram();
-    if( program->object == 0 ) {
-        g_debug_str( "error: could not create program\n");
-        return 0;
-    }
+    if( program->object == 0 ) return 0;
 
     glAttachShader( program->object, program->vs );
     glAttachShader( program->object, program->fs );
@@ -255,10 +251,10 @@ int program_link( Program *program, const char **attribs ) {
 
     glLinkProgram( program->object );
     glGetProgramiv( program->object, GL_LINK_STATUS, &linked );
+
     if( !linked ) {
         GLint len = 0;
         glGetShaderiv( program->object, GL_INFO_LOG_LENGTH, &len );
-
         if( len > 0 ) {
             char *err = g_new( char, len );
             glGetShaderInfoLog( program->object, len, 0, err );

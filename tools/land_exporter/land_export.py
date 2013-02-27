@@ -1,16 +1,18 @@
 # This script is licensed as public domain.
+# forked from Lee Salszman IQM exporter
 
 bl_info = {
-    "name": "Export Inter-Quake Model (.iqm/.iqe)",
-    "author": "Lee Salzman",
+    "name": "Export Land Scenes (.land) and Models (.lmesh)",
+    "author": "AndersonSP",
     "version": (2012, 5, 5),
     "blender": (2, 6, 3),
-    "location": "File > Export > Inter-Quake Model",
-    "description": "Export to the Inter-Quake Model format (.iqm/.iqe)",
+    "location": "File > Export > Land Model",
+    "description": "Export to the Land Scene/Model format (.land/.lmesh)",
     "warning": "",
     "wiki_url": "",
     "tracker_url": "",
-    "category": "Import-Export"}
+    "category": "Import-Export"
+}
 
 import os, struct, math
 import mathutils
@@ -45,7 +47,6 @@ IQM_TRIANGLE    = struct.Struct('<3I')
 IQM_JOINT       = struct.Struct('<Ii10f')
 IQM_POSE        = struct.Struct('<iI20f')
 IQM_ANIMATION   = struct.Struct('<3IfI')
-IQM_VERTEXARRAY = struct.Struct('<5I')
 IQM_BOUNDS      = struct.Struct('<8f')
 
 MAXVCACHE = 32
@@ -206,9 +207,7 @@ class Mesh:
                         bestscore = score
 
         print('%s: %d verts optimized to %d/%d loads for %d entry LRU cache' % (self.name, len(self.verts), vertloads, len(vertschedule), MAXVCACHE))
-        #print('%s: %d verts scheduled to %d' % (self.name, len(self.verts), len(vertschedule)))
         self.verts = vertschedule
-        # print('%s: %d tris scheduled to %d' % (self.name, len(self.tris), len(trischedule)))
         self.tris = trischedule
 
     def calcNeighbors(self):
@@ -788,7 +787,7 @@ def collectAnims(context, armature, scale, bones, animspecs):
     return anims
 
 
-def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False, filetype = 'IQM'):
+def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False):
     vertwarn = []
     objs = context.selected_objects #context.scene.objects
     meshes = []
@@ -900,15 +899,14 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False,
                     if not face.use_smooth:
                         vertindex = len(verts)
                         vertkey = Vertex(vertindex, vertco, vertno, vertuv, vertweights, vertcol)
-                        if filetype == 'IQM':
-                            vertkey.normalizeWeights()
+
+                        vertkey.normalizeWeights()
                         mesh.verts.append(vertkey)
                         faceverts.append(vertkey)
                         continue
 
                     vertkey = Vertex(v.index, vertco, vertno, vertuv, vertweights, vertcol)
-                    if filetype == 'IQM':
-                        vertkey.normalizeWeights()
+                    vertkey.normalizeWeights()
                     if not verts[v.index]:
                         verts[v.index] = vertkey
                         faceverts.append(vertkey)
@@ -924,77 +922,17 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False,
                             verts.append(vertkey)
                             faceverts.append(vertkey)
 
-                # Quake winding is reversed
+                # Quake winding is reversed (we use standard OpenGL winding)
                 for i in range(2, len(faceverts)):
-                    mesh.tris.append((faceverts[0], faceverts[i], faceverts[i-1]))
+                    mesh.tris.append((faceverts[0], faceverts[i-1], faceverts[i]))
 
     for mesh in meshes:
         mesh.optimize()
-        if filetype == 'IQM':
-            mesh.calcTangents()
-            mesh.calcNeighbors()
+        mesh.calcTangents()
+        mesh.calcNeighbors()
         print('%s %s: generated %d triangles' % (mesh.name, mesh.material, len(mesh.tris)))
 
     return meshes
-
-
-def exportIQE(file, meshes, bones, anims):
-    file.write('# Inter-Quake Export\n\n')
-
-    for bone in bones:
-        if bone.parent:
-            parent = bone.parent.index
-        else:
-            parent = -1
-        file.write('joint "%s" %d\n' % (bone.name, parent))
-        if meshes:
-            pos = bone.localmatrix.to_translation()
-            orient = bone.localmatrix.to_quaternion()
-            orient.normalize()
-            if orient.w > 0:
-                orient.negate()
-            scale = bone.localmatrix.to_scale()
-            scale.x = round(scale.x*0x10000)/0x10000
-            scale.y = round(scale.y*0x10000)/0x10000
-            scale.z = round(scale.z*0x10000)/0x10000
-            if scale.x == 1.0 and scale.y == 1.0 and scale.z == 1.0:
-                file.write('\tpq %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n' % (pos.x, pos.y, pos.z, orient.x, orient.y, orient.z, orient.w))
-            else:
-                file.write('\tpq %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n' % (pos.x, pos.y, pos.z, orient.x, orient.y, orient.z, orient.w, scale.x, scale.y, scale.z))
-
-    hascolors = any(mesh.verts and mesh.verts[0].color for mesh in meshes)
-    for mesh in meshes:
-        file.write('\nmesh "%s"\n\tmaterial "%s"\n\n' % (mesh.name, mesh.material))
-        for v in mesh.verts:
-            file.write('vp %.8f %.8f %.8f\n\tvt %.8f %.8f\n\tvn %.8f %.8f %.8f\n' % (v.coord.x, v.coord.y, v.coord.z, v.uv.x, v.uv.y, v.normal.x, v.normal.y, v.normal.z))
-            if bones:
-                weights = '\tvb'
-                for weight in v.weights:
-                    weights += ' %d %.8f' % (weight[1], weight[0])
-                file.write(weights + '\n')
-            if hascolors:
-                if v.color:
-                    file.write('\tvc %.8f %.8f %.8f %.8f\n' % (v.color[0] / 255.0, v.color[1] / 255.0, v.color[2] / 255.0, v.color[3] / 255.0))
-                else:
-                    file.write('\tvc 0 0 0 1\n')
-        file.write('\n')
-        for (v0, v1, v2) in mesh.tris:
-            file.write('fm %d %d %d\n' % (v0.index, v1.index, v2.index))
-
-    for anim in anims:
-        file.write('\nanimation "%s"\n\tframerate %.8f\n' % (anim.name, anim.fps))
-        if anim.flags&IQM_LOOP:
-            file.write('\tloop\n')
-        for frame in anim.frames:
-            file.write('\nframe\n')
-            for (pos, orient, scale, mat) in frame:
-                if scale.x == 1.0 and scale.y == 1.0 and scale.z == 1.0:
-                    file.write('pq %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n' % (pos.x, pos.y, pos.z, orient.x, orient.y, orient.z, orient.w))
-                else:
-                    file.write('pq %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n' % (pos.x, pos.y, pos.z, orient.x, orient.y, orient.z, orient.w, scale.x, scale.y, scale.z))
-
-    file.write('\n')
-
 
 def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True, usecol = False, scale = 1.0, animspecs = None, matfun = (lambda prefix, image: image), derigify = False):
     armature = findArmature(context)
@@ -1002,11 +940,7 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
         print('No armature selected')
         return
 
-    if filename.lower().endswith('.iqm'):
-        filetype = 'IQM'
-    elif filename.lower().endswith('.iqe'):
-        filetype = 'IQE'
-    else:
+    if not filename.lower().endswith('.lmesh'):
         print('Unknown file type: %s' % filename)
         return
 
@@ -1019,7 +953,7 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
         bones = {}
     bonelist = sorted(bones.values(), key=lambda bone: bone.index)
     if usemesh:
-        meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol, filetype)
+        meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol)
     else:
         meshes = []
     if useskel and animspecs:
@@ -1027,46 +961,42 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
     else:
         anims = []
 
-    if filetype == 'IQM':
-        iqm = IQMFile()
-        iqm.addMeshes(meshes)
-        iqm.addJoints(bonelist)
-        iqm.addAnims(anims)
-        iqm.calcFrameSize()
+
+    iqm = IQMFile()
+    iqm.addMeshes(meshes)
+    iqm.addJoints(bonelist)
+    iqm.addAnims(anims)
+    iqm.calcFrameSize()
 
     if filename:
         try:
-            if filetype == 'IQM':
-                file = open(filename, 'wb')
-            else:
-                file = open(filename, 'w')
+            file = open(filename, 'wb')
         except:
             print ('Failed writing to %s' % (filename))
             return
-        if filetype == 'IQM':
-            iqm.export(file, usebbox)
-        elif filetype == 'IQE':
-            exportIQE(file, meshes, bonelist, anims)
+
+        iqm.export(file, usebbox)
+
         file.close()
-        print('Saved %s file to %s' % (filetype, filename))
+        print('Saved %s file to %s' % ('LMesh', filename))
     else:
-        print('No %s file was generated' % (filetype))
+        print('No %s file was generated' % ('LMesh'))
 
 
 class ExportIQM(bpy.types.Operator, ExportHelper):
-    '''Export an Inter-Quake Model IQM or IQE file'''
-    bl_idname = "export.iqm"
-    bl_label = 'Export IQM'
-    filename_ext = ".iqm"
+    '''Export an LMesh Model file'''
+    bl_idname = "export.lmesh"
+    bl_label = 'Export LMesh'
+    filename_ext = ".lmesh"
     animspec = StringProperty(name="Animations", description="Animations to export", maxlen=1024, default="")
     usemesh = BoolProperty(name="Meshes", description="Generate meshes", default=True)
-    usemesh = BoolProperty(name="Tex Coords", description="Generate texture coordinates", default=True)
-    usemesh = BoolProperty(name="Normals", description="Generate normal vectors", default=True)
+    usetexcoords = BoolProperty(name="Tex Coords", description="Generate texture coordinates", default=True)
+    usenormals = BoolProperty(name="Normals", description="Generate normal vectors", default=True)
+    usetangents = BoolProperty(name="Tangents", description="Generate Tangent vectors", default=True)
+    usecol = BoolProperty(name="Vertex colors", description="Export vertex colors", default=False)
     useskel = BoolProperty(name="Skeleton", description="Generate skeleton", default=True)
     usebbox = BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
-    usecol = BoolProperty(name="Vertex colors", description="Export vertex colors", default=False)
     usescale = FloatProperty(name="Scale", description="Scale of exported model", default=1.0, min=0.0, step=50, precision=2)
-    #usetrans = FloatVectorProperty(name="Translate", description="Translate position of exported model", step=50, precision=2, size=3)
     matfmt = EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m+i-e")
     derigify = BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
 
@@ -1081,9 +1011,8 @@ class ExportIQM(bpy.types.Operator, ExportHelper):
         return {'FINISHED'}
 
     def check(self, context):
-        filepath = bpy.path.ensure_ext(self.filepath, '.iqm')
-        filepathalt = bpy.path.ensure_ext(self.filepath, '.iqe')
-        if filepath != self.filepath and filepathalt != self.filepath:
+        filepath = bpy.path.ensure_ext(self.filepath, '.lmesh')
+        if filepath != self.filepath:
             self.filepath = filepath
             return True
         return False
@@ -1091,8 +1020,8 @@ class ExportIQM(bpy.types.Operator, ExportHelper):
 
 
 def menu_func(self, context):
-    default_path = os.path.splitext(bpy.data.filepath)[0] + ".iqm"
-    self.layout.operator(ExportIQM.bl_idname, text="Inter-Quake Model (.iqm, .iqe)").filepath = default_path
+    default_path = os.path.splitext(bpy.data.filepath)[0] + ".lmesh"
+    self.layout.operator(ExportIQM.bl_idname, text="LMesh Model (.lmesh)").filepath = default_path
 
 
 def register():

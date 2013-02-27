@@ -156,8 +156,7 @@ void g_initialize( int width, int height, void *data ) {
     glEnable( GL_BLEND );
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
-    // glCullFace(GL_BACK);
-    glFrontFace(GL_CW);
+    glCullFace(GL_BACK);
 
     Program p;
     p.vs = program_load_shader( vs_glsl, GL_VERTEX_SHADER );
@@ -178,14 +177,14 @@ void g_initialize( int width, int height, void *data ) {
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
 
     world = world_new();
-    level_mdl = model_load( "castle_map.iqm" );
-    if( !level_mdl ) g_fatal_error( "couldn't load castle_map.iqm model" );
+    // level_mdl = model_load( "castle_map.iqm" );
+    // if( !level_mdl ) g_fatal_error( "couldn't load castle_map.iqm model" );
 
-    player_mdl = model_load( "freak.iqm" );
-    if( !player_mdl ) g_fatal_error( "couldn't load freak.iqm model" );
+    player_mdl = model_load( "freak.lmesh" );
+    if( !player_mdl ) g_fatal_error( "couldn't load freak.lmesh model" );
 
-    landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl, &p );
-    world_add_object( world, landscape );
+    // landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl, &p );
+    // world_add_object( world, landscape );
 
     player = player_new( (Vec){ .0, -2.0, .0}, player_mdl, &p );
     world_add_object( world, player->object );

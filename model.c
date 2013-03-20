@@ -92,6 +92,13 @@ typedef struct{
   unsigned char blendindex[4], blendweight[4];
 } IqmVertex;
 
+typedef struct {
+  GQuat rotate;
+  GVec  translate;
+  float scale;
+} AnimFrame;
+
+
 struct _GModel {
   int num_meshes, num_verts, num_tris, num_joints, num_frames, num_anims;
   char *str;
@@ -105,11 +112,18 @@ struct _GModel {
   IqmAnim *anims;
   IqmBounds *bounds;
 
-  GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
+  // GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
+  AnimFrame *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
 };
 
 
-  static int loadiqmmeshes( GModel *mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
+static void anim_frame_mul( AnimFrame *r, AnimFrame *a, AnimFrame*b ){
+    g_quat_vec_mul( &b->translate, &a->rotate, &b->translate );
+    g_vec_add( &b->translate, &b->translate, &a->translate );
+    g_quat_mul( &b->rotate, &a->rotate, &b->rotate );
+}
+
+static int loadiqmmeshes( GModel *mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
     mdl->num_meshes = hdr->num_meshes;
     mdl->num_tris = hdr->num_triangles;
     mdl->num_verts = hdr->num_vertexes;
@@ -182,17 +196,24 @@ struct _GModel {
     for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
     for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
 
-    mdl->base = g_new( GDualQuat, hdr->num_joints );
-    mdl->inversebase = g_new( GDualQuat, hdr->num_joints );
+    mdl->base = g_new( AnimFrame, hdr->num_joints );
+    mdl->inversebase = g_new( AnimFrame, hdr->num_joints );
     for( i = 0; i < (int) hdr->num_joints; i++ ) {
           IqmJoint *j = &joints[i];
+          AnimFrame *base = &mdl->base[i], *inverse = &mdl->inversebase[i];
+
           g_quat_normalize( &j->rotate );
-          g_dual_quat_from_quat_vec( &mdl->base[i], &j->rotate, &j->translate );
+          base->rotate = inverse->rotate = j->rotate;
+          base->translate = inverse->translate = j->translate;
 
-          if( j->parent >= 0)
-            g_dual_quat_mul( &mdl->base[i], &mdl->base[j->parent], &mdl->base[i] );
+          if( j->parent >= 0 ) {
+            AnimFrame *parent = &mdl->base[j->parent];
+            anim_frame_mul( base, parent, base );
+          }
 
-          g_dual_quat_invert( &mdl->inversebase[i], &mdl->base[i] );
+          g_quat_invert( &inverse->rotate );
+          g_vec_mul_scalar( &inverse->translate, &inverse->translate, -1.0 );
+          g_quat_vec_mul( &inverse->translate, &inverse->rotate, &inverse->translate );
     }
 
     GTexture tex;
@@ -216,8 +237,8 @@ static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr
     mdl->num_frames = hdr->num_frames;
     mdl->anims = (IqmAnim *)&buf[hdr->ofs_anims];
     mdl->poses = (IqmPose *)&buf[hdr->ofs_poses];
-    mdl->frames = g_new( GDualQuat, hdr->num_frames * hdr->num_poses );
-    mdl->outframe = g_new( GDualQuat, hdr->num_joints);
+    mdl->frames = g_new( AnimFrame, hdr->num_frames * hdr->num_poses );
+    mdl->outframe = g_new( AnimFrame, hdr->num_joints);
     mdl->out_verts = g_new( IqmVertex, mdl->num_verts );
 
     //TODO: load bounds data
@@ -253,12 +274,12 @@ static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr
             //   parentPose * childPose * childInverseBasePose
             int k = i*hdr->num_poses + j;
             g_quat_normalize( &rotate );
+            AnimFrame *frame = &mdl->frames[k];
+            frame->rotate = rotate;
+            frame->translate = translate;
 
-            g_dual_quat_from_quat_vec( &mdl->frames[k], &rotate, &translate );
-            g_dual_quat_mul( &mdl->frames[k], &mdl->frames[k], &mdl->inversebase[j] );
-
-            if( p->parent >= 0)
-              g_dual_quat_mul( &mdl->frames[k], &mdl->base[p->parent], &mdl->frames[k] );
+            anim_frame_mul( frame, frame, &mdl->inversebase[j] );
+            if( p->parent >= 0) anim_frame_mul( frame, &mdl->base[p->parent], frame );
         }
     }
 
@@ -281,16 +302,16 @@ static void animateiqm( GModel *mdl, float curframe ) {
     float frameoffset = curframe - frame1;
     frame1 %= mdl->num_frames;
     frame2 %= mdl->num_frames;
-    GDualQuat *d1 = &mdl->frames[frame1 * mdl->num_joints],
+    AnimFrame *d1 = &mdl->frames[frame1 * mdl->num_joints],
     *d2 = &mdl->frames[frame2 * mdl->num_joints];
 
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for( i = 0; i < mdl->num_joints; i++ ) {
-        GDualQuat r;// = d1[i];
-        g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
-        if( mdl->joints[i].parent >= 0) g_dual_quat_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
+        AnimFrame r = d1[i];
+        // g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
+        if( mdl->joints[i].parent >= 0) anim_frame_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
         else mdl->outframe[i] = r;
     }
 
@@ -298,7 +319,7 @@ static void animateiqm( GModel *mdl, float curframe ) {
     for( i = 0; i < mdl->num_verts; i++) {
         IqmVertex* v = &mdl->verts[i];
         // weighted blend of bone transformations assigned to this vert ( here for fixed pipeline )
-        GDualQuat r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
+        AnimFrame r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
         g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[0]], (v->blendweight[0]/255.0f) );
         for( j = 1; j < 4 && v->blendweight[j]; j++ )
           g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[j]], (v->blendweight[j]/255.0f) );

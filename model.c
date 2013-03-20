@@ -105,8 +105,8 @@ struct _GModel {
   IqmAnim *anims;
   IqmBounds *bounds;
 
-    GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
-  };
+  GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
+};
 
 
   static int loadiqmmeshes( GModel *mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
@@ -179,12 +179,12 @@ struct _GModel {
     //    if( hdr->ofs_adjacency ) adjacency = ( IqmTriangle *) &buf[hdr->ofs_adjacency];
 
     for( i=0; i<mdl->num_tris; i++ ) mdl->tris[i] = tris[i];
-      for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
-        for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
+    for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
+    for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
 
-          mdl->base = g_new( GDualQuat, hdr->num_joints );
-        mdl->inversebase = g_new( GDualQuat, hdr->num_joints );
-        for( i = 0; i < (int) hdr->num_joints; i++ ) {
+    mdl->base = g_new( GDualQuat, hdr->num_joints );
+    mdl->inversebase = g_new( GDualQuat, hdr->num_joints );
+    for( i = 0; i < (int) hdr->num_joints; i++ ) {
           IqmJoint *j = &joints[i];
           g_quat_normalize( &j->rotate );
           g_dual_quat_from_quat_vec( &mdl->base[i], &j->rotate, &j->translate );
@@ -193,40 +193,40 @@ struct _GModel {
             g_dual_quat_mul( &mdl->base[i], &mdl->base[j->parent], &mdl->base[i] );
 
           g_dual_quat_invert( &mdl->inversebase[i], &mdl->base[i] );
-        }
+    }
 
-        GTexture tex;
-        for( i = 0; i < (int)hdr->num_meshes; i++ ) {
-          IqmMesh *m = &mdl->meshes[i];
-          g_debug_str("%s: loaded mesh: %s\n", filename, &str[m->name]);
+    GTexture tex;
+    for( i = 0; i < (int)hdr->num_meshes; i++ ) {
+        IqmMesh *m = &mdl->meshes[i];
+        g_debug_str("%s: loaded mesh: %s\n", filename, &str[m->name]);
 
-          mdl->textures[i] = g_texture_load( &tex, &str[m->material] );
-          if( mdl->textures[i] ) g_debug_str("%s: loaded material: %s\n", filename, &str[m->material]);
-          else g_debug_str("%s: couldn't load material: %s\n", filename, &str[m->material]);
-        }
-
-        return 1;
+        mdl->textures[i] = g_texture_load( &tex, &str[m->material] );
+        if( mdl->textures[i] ) g_debug_str("%s: loaded material: %s\n", filename, &str[m->material]);
+        else g_debug_str("%s: couldn't load material: %s\n", filename, &str[m->material]);
       }
 
-      static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
-        if((int)hdr->num_poses != mdl->num_joints) return 0;
+      return 1;
+    }
 
-        const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
-        mdl->num_anims = hdr->num_anims;
-        mdl->num_frames = hdr->num_frames;
-        mdl->anims = (IqmAnim *)&buf[hdr->ofs_anims];
-        mdl->poses = (IqmPose *)&buf[hdr->ofs_poses];
-        mdl->frames = g_new( GDualQuat, hdr->num_frames * hdr->num_poses );
-        mdl->outframe = g_new( GDualQuat, hdr->num_joints);
-        mdl->out_verts = g_new( IqmVertex, mdl->num_verts );
+static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
+    if((int)hdr->num_poses != mdl->num_joints) return 0;
+
+    const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
+    mdl->num_anims = hdr->num_anims;
+    mdl->num_frames = hdr->num_frames;
+    mdl->anims = (IqmAnim *)&buf[hdr->ofs_anims];
+    mdl->poses = (IqmPose *)&buf[hdr->ofs_poses];
+    mdl->frames = g_new( GDualQuat, hdr->num_frames * hdr->num_poses );
+    mdl->outframe = g_new( GDualQuat, hdr->num_joints);
+    mdl->out_verts = g_new( IqmVertex, mdl->num_verts );
 
     //TODO: load bounds data
-        unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
-//    if( hdr->ofs_bounds ) mdl->bounds = (IqmBounds *)&buf[hdr->ofs_bounds];
+    unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
+    // if( hdr->ofs_bounds ) mdl->bounds = (IqmBounds *)&buf[hdr->ofs_bounds];
 
-        int i, j;
-        for( i = 0; i < (int)hdr->num_frames; i++ ) {
-          for( j = 0; j < (int)hdr->num_poses; j++ ) {
+    int i, j;
+    for( i = 0; i < (int)hdr->num_frames; i++ ) {
+        for( j = 0; j < (int)hdr->num_poses; j++ ) {
             IqmPose *p = &mdl->poses[j];
             GQuat rotate;
             GVec translate;
@@ -259,43 +259,43 @@ struct _GModel {
 
             if( p->parent >= 0)
               g_dual_quat_mul( &mdl->frames[k], &mdl->base[p->parent], &mdl->frames[k] );
-          }
         }
+    }
 
-        for( i = 0; i < (int)hdr->num_anims; i++ ) {
-          IqmAnim *a = &mdl->anims[i];
-          printf("%s: loaded anim: %s\n", filename, &str[a->name]);
-        }
+    for( i = 0; i < (int)hdr->num_anims; i++ ) {
+      IqmAnim *a = &mdl->anims[i];
+      printf("%s: loaded anim: %s\n", filename, &str[a->name]);
+    }
 
-        g_free( mdl->base );
-        g_free( mdl->inversebase );
+    g_free( mdl->base );
+    g_free( mdl->inversebase );
 
-        return 1;
-      }
+    return 1;
+}
 
-      static void animateiqm( GModel *mdl, float curframe ) {
-        if(!mdl->num_frames) return;
-        int i, j;
+static void animateiqm( GModel *mdl, float curframe ) {
+    if(!mdl->num_frames) return;
+    int i, j;
 
-        int frame1 = (int)floor(curframe), frame2 = frame1 + 1;
-        float frameoffset = curframe - frame1;
-        frame1 %= mdl->num_frames;
-        frame2 %= mdl->num_frames;
-        GDualQuat *d1 = &mdl->frames[frame1 * mdl->num_joints],
-        *d2 = &mdl->frames[frame2 * mdl->num_joints];
+    int frame1 = (int)floor(curframe), frame2 = frame1 + 1;
+    float frameoffset = curframe - frame1;
+    frame1 %= mdl->num_frames;
+    frame2 %= mdl->num_frames;
+    GDualQuat *d1 = &mdl->frames[frame1 * mdl->num_joints],
+    *d2 = &mdl->frames[frame2 * mdl->num_joints];
 
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
-        for( i = 0; i < mdl->num_joints; i++ ) {
+    for( i = 0; i < mdl->num_joints; i++ ) {
         GDualQuat r;// = d1[i];
         g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
         if( mdl->joints[i].parent >= 0) g_dual_quat_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
         else mdl->outframe[i] = r;
-      }
+    }
 
     // The actual vertex generation based on the matrixes follows...
-      for( i = 0; i < mdl->num_verts; i++) {
+    for( i = 0; i < mdl->num_verts; i++) {
         IqmVertex* v = &mdl->verts[i];
         // weighted blend of bone transformations assigned to this vert ( here for fixed pipeline )
         GDualQuat r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
@@ -316,21 +316,21 @@ struct _GModel {
         // Note that bitangent = cross(normal, tangent) * sign,
         // where the sign is stored in the 4th coordinate of the input tangent data.
 //  *dstbitan = dstnorm->cross(*dsttan) * srctan->w;
-      }
     }
+}
 
 //TODO: add a resource manager for this assets
-    GModel* g_model_load( const char *filename ){
-      char filepath[256];
-      sprintf( filepath, "data/models/%s", filename );
+GModel* g_model_load( const char *filename ){
+    char filepath[256];
+    sprintf( filepath, "data/models/%s", filename );
 
-      FILE *f = fopen(filepath, "rb");
-      if(!f) return NULL;
-      GModel* mdl = g_new0( GModel, 1 );
+    FILE *f = fopen(filepath, "rb");
+    if(!f) return NULL;
+    GModel* mdl = g_new0( GModel, 1 );
 
-      unsigned char *buf = NULL;
-      iqmheader hdr;
-      if( fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)) )
+    unsigned char *buf = NULL;
+    iqmheader hdr;
+    if( fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)) )
         goto error;
 
     if( hdr.version != IQM_VERSION || hdr.filesize > (16<<20) ) goto error; // sanity check... don't load files bigger than 16 MB
@@ -352,9 +352,9 @@ struct _GModel {
     g_model_destroy( mdl );
     fclose(f);
     return NULL;
-  }
+}
 
-  void g_model_destroy( GModel *mdl ){
+void g_model_destroy( GModel *mdl ){
     if( !mdl ) return;
     if( mdl->str ) g_free( mdl->str );
     if( mdl->meshes ) g_free( mdl->meshes );
@@ -367,10 +367,10 @@ struct _GModel {
 
     if( mdl->textures ) g_free( mdl->textures );
     g_free( mdl );
-  }
+}
 
 //TODO: add support for normals and normal mapping
-  void g_model_draw( GModel *mdl, float frame ){
+void g_model_draw( GModel *mdl, float frame ){
     animateiqm( mdl, frame );
 
     IqmVertex* v = (mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
@@ -393,6 +393,6 @@ struct _GModel {
     glDisableClientState(GL_VERTEX_ARRAY);
 //    glDisableClientState(GL_NORMAL_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-  }
+}
 
 

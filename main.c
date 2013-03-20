@@ -4,9 +4,10 @@ int keypressed[GK_KEY_MAX];
 
 GMat4 projection, model, ortho;
 
-// GModel *mdl, *sky, *map;
+GModel *mdl; //, *sky, *map;
 GFont *fnt;
 
+float anim_frame = 1.0;
 
 void g_configure( GConfig *conf ) {
     // width, height
@@ -52,6 +53,9 @@ void g_initialize( int width, int height, void *data ) {
     g_mat4_ortho( &ortho, width, height, 0.0, 1.0 );
 
 
+    mdl = g_model_load( "mrfixit.iqm" );
+    if( !mdl ) g_fatal_error( "couldn't load mrfixit.iqm model" );
+
     fnt = g_font_new( "dejavu16.sfn" );
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font\n" );
 }
@@ -62,6 +66,16 @@ void g_render( void *data ) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor4f( 1.0, 1.0, 1.0, 1.0 );       // White
 
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMultMatrixf( (GLfloat*) &projection );
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glRotatef(-90, 0, 1, 0);
+    glRotatef(-90, 1, 0, 0);
+    glTranslatef(-10.0, -0, -5);
+
+    g_model_draw( mdl, anim_frame );
 
 
     // draw 2D composition layer ( HUD )
@@ -85,7 +99,7 @@ void g_render( void *data ) {
 }
 
 void g_update( unsigned int milliseconds, void *data ) {
-
+    anim_frame += (milliseconds/100.0);
 }
 
 int g_handle_event( GEvent *event, void *data ) {

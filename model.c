@@ -1,84 +1,55 @@
 #include "myr.h"
 
 #define EPSILON 0.002f
-#define IQM_MAGIC "INTERQUAKEMODEL"
-#define IQM_VERSION 2
+#define LMESH_MAGIC "_LMesh_"
+#define LMESH_VERSION 2
 
 typedef struct {
-  char magic[16];
+  char magic[8];
   unsigned int version;
   unsigned int filesize;
-  unsigned int flags;
+  unsigned int flags, size;
   unsigned int num_text, ofs_text;
   unsigned int num_meshes, ofs_meshes;
-  unsigned int num_vertexarrays, num_vertexes, ofs_vertexarrays;
-  unsigned int num_triangles, ofs_triangles, ofs_adjacency;
+  unsigned int num_vertexes, ofs_vertexes;
+  unsigned int num_triangles, ofs_triangles;
   unsigned int num_joints, ofs_joints;
   unsigned int num_poses, ofs_poses;
   unsigned int num_anims, ofs_anims;
   unsigned int num_frames, num_framechannels, ofs_frames, ofs_bounds;
-  unsigned int num_comment, ofs_comment;
-  unsigned int num_extensions, ofs_extensions;
-} iqmheader;
+} LMeshHeader;
 
 typedef struct {
   unsigned int name, material;
   unsigned int first_vertex, num_vertexes;
   unsigned int first_triangle, num_triangles;
-} IqmMesh;
-
-enum {
-  IQM_POSITION     = 0,
-  IQM_TEXCOORD     = 1,
-  IQM_NORMAL       = 2,
-  IQM_TANGENT      = 3,
-  IQM_BLENDINDEXES = 4,
-  IQM_BLENDWEIGHTS = 5,
-  IQM_COLOR        = 6,
-  IQM_CUSTOM       = 0x10
-};
-
-enum {
-  IQM_BYTE   = 0,
-  IQM_UBYTE  = 1,
-  IQM_SHORT  = 2,
-  IQM_USHORT = 3,
-  IQM_INT    = 4,
-  IQM_UINT   = 5,
-  IQM_HALF   = 6,
-  IQM_FLOAT  = 7,
-  IQM_DOUBLE = 8,
-};
+} LMeshSubMesh;
 
 typedef struct {
   unsigned int vertex[3];
-} IqmTriangle;
+} LMeshTriangle;
 
 typedef struct {
   unsigned int name;
   int parent;
-  GVec translate;
-  GQuat rotate;
-  GVec scale;
-} IqmJoint;
+  GVec translate, inv_translate;
+  GQuat rotate, inv_rotate;
+  GVec scale, inv_scale;
+} LMeshJoint;
 
 typedef struct {
   int parent;
   unsigned int mask;
   float channeloffset[10], channelscale[10];
-} IqmPose;
+} LMeshPose;
 
 typedef struct {
   unsigned int name, first_frame, num_frames;
   float framerate;
   unsigned int flags;
-} IqmAnim;
+} LMeshAnim;
 
 enum { IQM_LOOP = 1<<0 };
-
-typedef struct {
-  unsigned int type, flags, format, size, offset;
-} IqmVertexArray;
 
 typedef struct {
   float bbmin[3], bbmax[3];
@@ -88,158 +59,85 @@ typedef struct {
 typedef struct{
   GVec loc, normal;
   GVec2 texcoord;
-  GVec4 tangent, bitangent;
+  GVec4 tangent;
   unsigned char blendindex[4], blendweight[4];
-} IqmVertex;
-
-typedef struct {
-  GQuat rotate;
-  GVec  translate;
-  float scale;
-} AnimFrame;
-
+} LMeshVertex;
 
 struct _GModel {
   int num_meshes, num_verts, num_tris, num_joints, num_frames, num_anims;
   char *str;
 
-  IqmMesh *meshes;
-  IqmVertex *verts, *out_verts;
-  IqmTriangle *tris, *adjacency;
+  LMeshSubMesh *meshes;
+  LMeshVertex *verts, *out_verts;
+  LMeshTriangle *tris;
   GLuint *textures;
-  IqmJoint *joints;
-  IqmPose *poses;
-  IqmAnim *anims;
+  LMeshJoint *joints;
+  LMeshPose *poses;
+  LMeshAnim *anims;
   IqmBounds *bounds;
 
-  // GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
-  AnimFrame *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
+  GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
 };
 
 
-static void anim_frame_mul( AnimFrame *r, AnimFrame *a, AnimFrame*b ){
-    g_quat_vec_mul( &b->translate, &a->rotate, &b->translate );
-    g_vec_add( &b->translate, &b->translate, &a->translate );
-    g_quat_mul( &b->rotate, &a->rotate, &b->rotate );
-}
-
-static int loadiqmmeshes( GModel *mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
+static int loadiqmmeshes( GModel *mdl, const char *filename, const LMeshHeader *hdr, unsigned char *buf ) {
     mdl->num_meshes = hdr->num_meshes;
     mdl->num_tris = hdr->num_triangles;
     mdl->num_verts = hdr->num_vertexes;
     mdl->num_joints = hdr->num_joints;
 
-    mdl->meshes = g_new( IqmMesh, mdl->num_meshes );
-    mdl->tris = g_new( IqmTriangle, mdl->num_tris );
-    mdl->verts = g_new( IqmVertex, mdl->num_verts );
-    mdl->joints = g_new( IqmJoint, mdl->num_joints );
+    mdl->meshes = g_new( LMeshSubMesh, mdl->num_meshes );
+    mdl->tris = g_new( LMeshTriangle, mdl->num_tris );
+    mdl->verts = g_new( LMeshVertex, mdl->num_verts );
+    mdl->joints = g_new( LMeshJoint, mdl->num_joints );
     mdl->textures = g_new0( GLuint, mdl->num_meshes );
 
     const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
-    IqmVertexArray *vas = (IqmVertexArray *)&buf[hdr->ofs_vertexarrays];
 
-    float *loc=NULL, *normal=NULL, *texcoord=NULL, *tangent=NULL;
-    unsigned char *blendindex = NULL, *blendweight=NULL;
+    int i;
+    LMeshVertex* verts = (LMeshVertex *)&buf[hdr->ofs_vertexes];
+    LMeshTriangle * tris = (LMeshTriangle *) &buf[hdr->ofs_triangles];
+    LMeshSubMesh* meshes = (LMeshSubMesh *) &buf[hdr->ofs_meshes];
+    LMeshJoint* joints = (LMeshJoint *) &buf[hdr->ofs_joints];
 
-    int i,j;
-    for( i = 0; i < (int)hdr->num_vertexarrays; i++ ) {
-      IqmVertexArray *va = &vas[i];
-      switch(va->type) {
-        case IQM_POSITION:
-        if(va->format != IQM_FLOAT || va->size != 3) return 0;
-        loc = (float *) &buf[va->offset];
-        break;
-
-        case IQM_NORMAL:
-        if(va->format != IQM_FLOAT || va->size != 3) return 0;
-        normal = (float *) &buf[va->offset];
-        break;
-
-        case IQM_TANGENT:
-        if(va->format != IQM_FLOAT || va->size != 4) return 0;
-        tangent = (float *) &buf[va->offset];
-        break;
-
-        case IQM_TEXCOORD:
-        if(va->format != IQM_FLOAT || va->size != 2) return 0;
-        texcoord = (float *) &buf[va->offset];
-        break;
-
-        case IQM_BLENDINDEXES:
-        if(va->format != IQM_UBYTE || va->size != 4) return 0;
-        blendindex = (unsigned char*) &buf[va->offset];
-        break;
-
-        case IQM_BLENDWEIGHTS:
-        if(va->format != IQM_UBYTE || va->size != 4) return 0;
-        blendweight = (unsigned char*) &buf[va->offset];
-        break;
-      }
-    }
-
-    for( j=0; j<mdl->num_verts; j++ ){
-      IqmVertex *v = &mdl->verts[j];
-      if( loc ) memcpy( &v->loc, &loc[j*3], sizeof(GVec) );
-      if( normal ) memcpy( &v->normal, &normal[j*3], sizeof(GVec) );
-      if( tangent ) memcpy( &v->tangent, &tangent[j*4], sizeof(GVec4) );
-      if( texcoord ) memcpy( &v->texcoord, &texcoord[j*2], sizeof(GVec2) );
-      if( blendindex ) memcpy( &v->blendindex, &blendindex[j*4], sizeof(unsigned char)*4 );
-      if( blendweight ) memcpy( &v->blendweight, &blendweight[j*4], sizeof(unsigned char)*4 );
-    }
-
-    IqmTriangle * tris = (IqmTriangle *) &buf[hdr->ofs_triangles];
-    IqmMesh* meshes = (IqmMesh *) &buf[hdr->ofs_meshes];
-    IqmJoint* joints = (IqmJoint *) &buf[hdr->ofs_joints];
-    //    if( hdr->ofs_adjacency ) adjacency = ( IqmTriangle *) &buf[hdr->ofs_adjacency];
-
+    for( i=0; i<mdl->num_verts; i++ ) mdl->verts[i] = verts[i];
     for( i=0; i<mdl->num_tris; i++ ) mdl->tris[i] = tris[i];
     for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
     for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
 
-    mdl->base = g_new( AnimFrame, hdr->num_joints );
-    mdl->inversebase = g_new( AnimFrame, hdr->num_joints );
+    mdl->base = g_new( GDualQuat, hdr->num_joints );
+    mdl->inversebase = g_new( GDualQuat, hdr->num_joints );
     for( i = 0; i < (int) hdr->num_joints; i++ ) {
-          IqmJoint *j = &joints[i];
-          AnimFrame *base = &mdl->base[i], *inverse = &mdl->inversebase[i];
-
-          g_quat_normalize( &j->rotate );
-          base->rotate = inverse->rotate = j->rotate;
-          base->translate = inverse->translate = j->translate;
-
-          if( j->parent >= 0 ) {
-            AnimFrame *parent = &mdl->base[j->parent];
-            anim_frame_mul( base, parent, base );
-          }
-
-          g_quat_invert( &inverse->rotate );
-          g_vec_mul_scalar( &inverse->translate, &inverse->translate, -1.0 );
-          g_quat_vec_mul( &inverse->translate, &inverse->rotate, &inverse->translate );
+        LMeshJoint *j = &joints[i];
+        g_quat_normalize( &j->rotate );
+        g_dual_quat_from_quat_vec( &mdl->base[i], &j->rotate, &j->translate );
+        g_dual_quat_from_quat_vec( &mdl->inversebase[i], &j->inv_rotate, &j->inv_translate );
     }
 
     GTexture tex;
     for( i = 0; i < (int)hdr->num_meshes; i++ ) {
-        IqmMesh *m = &mdl->meshes[i];
+        LMeshSubMesh *m = &mdl->meshes[i];
         g_debug_str("%s: loaded mesh: %s\n", filename, &str[m->name]);
 
         mdl->textures[i] = g_texture_load( &tex, &str[m->material] );
         if( mdl->textures[i] ) g_debug_str("%s: loaded material: %s\n", filename, &str[m->material]);
         else g_debug_str("%s: couldn't load material: %s\n", filename, &str[m->material]);
-      }
-
-      return 1;
     }
 
-static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr, unsigned char *buf ) {
+    return 1;
+}
+
+static int loadiqmanims( GModel* mdl, const char *filename, const LMeshHeader *hdr, unsigned char *buf ) {
     if((int)hdr->num_poses != mdl->num_joints) return 0;
 
     const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
     mdl->num_anims = hdr->num_anims;
     mdl->num_frames = hdr->num_frames;
-    mdl->anims = (IqmAnim *)&buf[hdr->ofs_anims];
-    mdl->poses = (IqmPose *)&buf[hdr->ofs_poses];
-    mdl->frames = g_new( AnimFrame, hdr->num_frames * hdr->num_poses );
-    mdl->outframe = g_new( AnimFrame, hdr->num_joints);
-    mdl->out_verts = g_new( IqmVertex, mdl->num_verts );
+    mdl->anims = (LMeshAnim *)&buf[hdr->ofs_anims];
+    mdl->poses = (LMeshPose *)&buf[hdr->ofs_poses];
+    mdl->frames = g_new( GDualQuat, hdr->num_frames * hdr->num_poses );
+    mdl->outframe = g_new( GDualQuat, hdr->num_joints);
+    mdl->out_verts = g_new( LMeshVertex, mdl->num_verts );
 
     //TODO: load bounds data
     unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
@@ -248,7 +146,7 @@ static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr
     int i, j;
     for( i = 0; i < (int)hdr->num_frames; i++ ) {
         for( j = 0; j < (int)hdr->num_poses; j++ ) {
-            IqmPose *p = &mdl->poses[j];
+            LMeshPose *p = &mdl->poses[j];
             GQuat rotate;
             GVec translate;
 
@@ -268,24 +166,20 @@ static int loadiqmanims( GModel* mdl, const char *filename, const iqmheader *hdr
 
             // Concatenate each pose with the inverse base pose to avoid doing this at animation time.
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
-            // Thus it all negates at animation time like so:
-            //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
-            //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
-            //   parentPose * childPose * childInverseBasePose
             int k = i*hdr->num_poses + j;
             g_quat_normalize( &rotate );
-            AnimFrame *frame = &mdl->frames[k];
-            frame->rotate = rotate;
-            frame->translate = translate;
 
-            anim_frame_mul( frame, frame, &mdl->inversebase[j] );
-            if( p->parent >= 0) anim_frame_mul( frame, &mdl->base[p->parent], frame );
+            g_dual_quat_from_quat_vec( &mdl->frames[k], &rotate, &translate );
+            g_dual_quat_mul( &mdl->frames[k], &mdl->frames[k], &mdl->inversebase[j] );
+
+            if( p->parent >= 0)
+                g_dual_quat_mul( &mdl->frames[k], &mdl->base[p->parent], &mdl->frames[k] );
         }
     }
 
     for( i = 0; i < (int)hdr->num_anims; i++ ) {
-      IqmAnim *a = &mdl->anims[i];
-      printf("%s: loaded anim: %s\n", filename, &str[a->name]);
+        LMeshAnim *a = &mdl->anims[i];
+        printf("%s: loaded anim: %s\n", filename, &str[a->name]);
     }
 
     g_free( mdl->base );
@@ -302,24 +196,24 @@ static void animateiqm( GModel *mdl, float curframe ) {
     float frameoffset = curframe - frame1;
     frame1 %= mdl->num_frames;
     frame2 %= mdl->num_frames;
-    AnimFrame *d1 = &mdl->frames[frame1 * mdl->num_joints],
+    GDualQuat *d1 = &mdl->frames[frame1 * mdl->num_joints],
     *d2 = &mdl->frames[frame2 * mdl->num_joints];
 
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for( i = 0; i < mdl->num_joints; i++ ) {
-        AnimFrame r = d1[i];
-        // g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
-        if( mdl->joints[i].parent >= 0) anim_frame_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
+        GDualQuat r;// = d1[i];
+        g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
+        if( mdl->joints[i].parent >= 0) g_dual_quat_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
         else mdl->outframe[i] = r;
     }
 
     // The actual vertex generation based on the matrixes follows...
     for( i = 0; i < mdl->num_verts; i++) {
-        IqmVertex* v = &mdl->verts[i];
+        LMeshVertex* v = &mdl->verts[i];
         // weighted blend of bone transformations assigned to this vert ( here for fixed pipeline )
-        AnimFrame r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
+        GDualQuat r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
         g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[0]], (v->blendweight[0]/255.0f) );
         for( j = 1; j < 4 && v->blendweight[j]; j++ )
           g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[j]], (v->blendweight[j]/255.0f) );
@@ -327,7 +221,7 @@ static void animateiqm( GModel *mdl, float curframe ) {
         g_dual_quat_normalize( &r );
 
         // Transform attributes by the blended dual quaternion.
-        IqmVertex* ov = &mdl->out_verts[i];
+        LMeshVertex* ov = &mdl->out_verts[i];
         g_dual_quat_vec_mul( &ov->loc, &r, &v->loc );
 
 //  *dstnorm = matnorm.transform(*srcnorm);
@@ -350,11 +244,11 @@ GModel* g_model_load( const char *filename ){
     GModel* mdl = g_new0( GModel, 1 );
 
     unsigned char *buf = NULL;
-    iqmheader hdr;
-    if( fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)) )
+    LMeshHeader hdr;
+    if( fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, LMESH_MAGIC, sizeof(hdr.magic)) )
         goto error;
 
-    if( hdr.version != IQM_VERSION || hdr.filesize > (16<<20) ) goto error; // sanity check... don't load files bigger than 16 MB
+    if( hdr.version != LMESH_VERSION || hdr.filesize > (16<<20) ) goto error; // sanity check... don't load files bigger than 16 MB
 
     buf = (unsigned char*) malloc( hdr.filesize );
     if( fread(buf + sizeof(hdr), 1, hdr.filesize - sizeof(hdr), f) != hdr.filesize - sizeof(hdr) )
@@ -394,11 +288,11 @@ void g_model_destroy( GModel *mdl ){
 void g_model_draw( GModel *mdl, float frame ){
     animateiqm( mdl, frame );
 
-    IqmVertex* v = (mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
-    glVertexPointer(3, GL_FLOAT, sizeof(IqmVertex), &v[0].loc );
+    LMeshVertex* v = (mdl->num_frames > 0 ? mdl->out_verts : mdl->verts);
+    glVertexPointer(3, GL_FLOAT, sizeof(LMeshVertex), &v[0].loc );
 
 //    glNormalPointer(GL_FLOAT, 0, numframes > 0 ? outnormal : innormal);
-    glTexCoordPointer(2, GL_FLOAT, sizeof(IqmVertex), &mdl->verts[0].texcoord );
+    glTexCoordPointer(2, GL_FLOAT, sizeof(LMeshVertex), &mdl->verts[0].texcoord );
 
     glEnableClientState( GL_VERTEX_ARRAY );
 //    glEnableClientState(GL_NORMAL_ARRAY);
@@ -406,7 +300,7 @@ void g_model_draw( GModel *mdl, float frame ){
 
     int i;
     for( i = 0; i < mdl->num_meshes; i++ ) {
-      IqmMesh *m = &mdl->meshes[i];
+      LMeshSubMesh *m = &mdl->meshes[i];
       glBindTexture( GL_TEXTURE_2D, mdl->textures[i] );
       glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, &mdl->tris[m->first_triangle] );
     }
@@ -415,5 +309,3 @@ void g_model_draw( GModel *mdl, float frame ){
 //    glDisableClientState(GL_NORMAL_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
-
-

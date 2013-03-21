@@ -35,7 +35,7 @@ void g_initialize( int width, int height, void *data ) {
     glDepthFunc(GL_LESS);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    glFrontFace(GL_CW);
+    // glFrontFace(GL_CW);
 
     glEnable( GL_TEXTURE_2D );  // Texture please
     glDisable( GL_LIGHTING );   // No lighting
@@ -53,8 +53,8 @@ void g_initialize( int width, int height, void *data ) {
     g_mat4_ortho( &ortho, width, height, 0.0, 1.0 );
 
 
-    mdl = g_model_load( "mrfixit.iqm" );
-    if( !mdl ) g_fatal_error( "couldn't load mrfixit.iqm model" );
+    mdl = g_model_load( "player_test.lmesh" );
+    if( !mdl ) g_fatal_error( "couldn't load player_test.lmesh model" );
 
     fnt = g_font_new( "dejavu16.sfn" );
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font\n" );

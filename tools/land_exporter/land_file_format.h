@@ -1,12 +1,12 @@
 typedef struct {
-    char magic[4]; //Land
+    char magic[8]; //_LMesh_
     unsigned int version;      // 1
     unsigned int filesize;     // ??
     unsigned int flags, size;  // format and size of the vertexes (or'ed ATTR_* flags)
     unsigned int num_text,     ofs_text;
     unsigned int num_meshes,   ofs_meshes;
     unsigned int num_vertexes, ofs_vertexes;
-    unsigned int num_indexes,  ofs_indexes, ofs_adjacency;
+    unsigned int num_indexes,  ofs_indexes;
     unsigned int num_joints,   ofs_joints;
     unsigned int num_poses,    ofs_poses;
     unsigned int num_anims,    ofs_anims;
@@ -18,9 +18,8 @@ enum {
     ATTR_NORMAL       = 1<<1,  // 12 bytes: Vec
     ATTR_TEXCOORD     = 1<<2,  //  8 bytes:  Vec2
     ATTR_TANGENT      = 1<<3,  // 16 bytes: Vec4
-    ATTR_BLENDINDEXES = 1<<4,  //  4 bytes: 4 indexes (0..255)
-    ATTR_BLENDWEIGHTS = 1<<5,  //  4 bytes: 4 weights (0..255)
-    ATTR_COLOR        = 1<<6,  //  4 bytes: RGBA value
+    ATTR_BONES       = 1<<4,  //  8 bytes: 4 indexes (0..255) and 4 weights (0..255)
+    ATTR_COLOR        = 1<<5,  //  4 bytes: RGBA value
 };
 
 typedef struct {

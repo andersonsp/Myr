@@ -1,5 +1,5 @@
 # This script is licensed as public domain.
-# forked from Lee Salszman IQM exporter
+# forked from Lee Salszman LMESH exporter
 
 bl_info = {
     "name": "Export Land Scenes (.land) and Models (.lmesh)",
@@ -14,70 +14,80 @@ bl_info = {
     "category": "Import-Export"
 }
 
-import os, struct, math
+import os
+import struct
+import math
 import mathutils
 import bpy
 from bpy.props import *
 from bpy_extras.io_utils import ExportHelper
 
-IQM_POSITION     = 0
-IQM_TEXCOORD     = 1
-IQM_NORMAL       = 2
-IQM_TANGENT      = 3
-IQM_BLENDINDEXES = 4
-IQM_BLENDWEIGHTS = 5
-IQM_COLOR        = 6
-IQM_CUSTOM       = 0x10
+LMESH_POSITION = 0
+LMESH_TEXCOORD = 1
+LMESH_NORMAL = 2
+LMESH_TANGENT = 3
+LMESH_BLENDINDEXES = 4
+LMESH_BLENDWEIGHTS = 5
+LMESH_COLOR = 6
+LMESH_CUSTOM = 0x10
 
-IQM_BYTE   = 0
-IQM_UBYTE  = 1
-IQM_SHORT  = 2
-IQM_USHORT = 3
-IQM_INT    = 4
-IQM_UINT   = 5
-IQM_HALF   = 6
-IQM_FLOAT  = 7
-IQM_DOUBLE = 8
+ATTR_POSITION = (1 << 0)  # 12 bytes: Vec
+ATTR_NORMAL = (1 << 1)    # 12 bytes: Vec
+ATTR_TEXCOORD = (1 << 2)  # 8 bytes:  Vec2
+ATTR_TANGENT = (1 << 3)   # 16 bytes: Vec4
+ATTR_BONES = (1 << 4)     # 8 bytes: 4 indexes (0..255) and 4 weights (0..255)
+ATTR_COLOR = (1 << 5)     # 4 bytes: RGBA value
 
-IQM_LOOP = 1
+LMESH_BYTE = 0
+LMESH_UBYTE = 1
+LMESH_SHORT = 2
+LMESH_USHORT = 3
+LMESH_INT = 4
+LMESH_UINT = 5
+LMESH_HALF = 6
+LMESH_FLOAT = 7
+LMESH_DOUBLE = 8
 
-IQM_HEADER      = struct.Struct('<16s27I')
-IQM_MESH        = struct.Struct('<6I')
-IQM_TRIANGLE    = struct.Struct('<3I')
-IQM_JOINT       = struct.Struct('<Ii10f')
-IQM_POSE        = struct.Struct('<iI20f')
-IQM_ANIMATION   = struct.Struct('<3IfI')
-IQM_BOUNDS      = struct.Struct('<8f')
+LMESH_LOOP = 1
+
+LMESH_HEADER = struct.Struct('<8s22I')
+LMESH_MESH = struct.Struct('<6I')
+LMESH_TRIANGLE = struct.Struct('<3I')
+LMESH_JOINT = struct.Struct('<Ii20f')
+LMESH_POSE = struct.Struct('<iI20f')
+LMESH_ANIMATION = struct.Struct('<3IfI')
+LMESH_BOUNDS = struct.Struct('<8f')
 
 MAXVCACHE = 32
 
+
 class Vertex:
     def __init__(self, index, coord, normal, uv, weights, color):
-        self.index   = index
-        self.coord   = coord
-        self.normal  = normal
-        self.uv      = uv
+        self.index = index
+        self.coord = coord
+        self.normal = normal
+        self.uv = uv
         self.weights = weights
-        self.color   = color
+        self.color = color
 
     def normalizeWeights(self):
         # renormalizes all weights such that they add up to 255
         # the list is chopped/padded to exactly 4 weights if necessary
         if not self.weights:
-            self.weights = [ (0, 0), (0, 0), (0, 0), (0, 0) ]
+            self.weights = [(0, 0), (0, 0), (0, 0), (0, 0)]
             return
-        self.weights.sort(key = lambda weight: weight[0], reverse=True)
+        self.weights.sort(key=lambda weight: weight[0], reverse=True)
         if len(self.weights) > 4:
             del self.weights[4:]
-        totalweight = sum([ weight for (weight, bone) in self.weights])
+        totalweight = sum([weight for (weight, bone) in self.weights])
         if totalweight > 0:
-            self.weights = [ (int(round(weight * 255.0 / totalweight)), bone) for (weight, bone) in self.weights]
+            self.weights = [(int(round(weight * 255.0 / totalweight)), bone) for (weight, bone) in self.weights]
             while len(self.weights) > 1 and self.weights[-1][0] <= 0:
                 self.weights.pop()
         else:
             totalweight = len(self.weights)
-            self.weights = [ (int(round(255.0 / totalweight)), bone) for (weight, bone) in self.weights]
-        totalweight = sum([ weight for (weight, bone) in self.weights])
+            self.weights = [(int(round(255.0 / totalweight)), bone) for (weight, bone) in self.weights]
+        totalweight = sum([weight for (weight, bone) in self.weights])
         while totalweight != 255:
             for i, (weight, bone) in enumerate(self.weights):
                 if totalweight > 255 and weight > 0:
@@ -108,11 +118,11 @@ class Vertex:
 
 class Mesh:
     def __init__(self, name, material, verts):
-        self.name      = name
-        self.material  = material
-        self.verts     = [ None for v in verts ]
-        self.vertmap   = {}
-        self.tris      = []
+        self.name = name
+        self.material = material
+        self.verts = [None for v in verts]
+        self.vertmap = {}
+        self.tris = []
 
     def calcTangents(self):
         # See "Tangent Space Calculation" at http://www.terathon.com/code/tangent.html
@@ -167,7 +177,7 @@ class Mesh:
                 besttri = i
                 bestscore = scores[i]
 
-        vertloads = 0 # debug info
+        vertloads = 0  # debug info
         vertschedule = []
         trischedule = []
         vcache = []
@@ -176,15 +186,15 @@ class Mesh:
             scores[besttri] = -666.0
             trischedule.append(tri)
             for v in tri:
-                if v.cacherank < 0: # debug info
-                    vertloads += 1  # debug info
+                if v.cacherank < 0:  # debug info
+                    vertloads += 1   # debug info
                 if v.index < 0:
                     v.index = len(vertschedule)
                     vertschedule.append(v)
                 v.uses.remove(besttri)
                 v.cacherank = -1
                 v.score = -1.0
-            vcache = [ v for v in tri if v.uses ] + [ v for v in vcache if v.cacherank >= 0 ]
+            vcache = [v for v in tri if v.uses] + [v for v in vcache if v.cacherank >= 0]
             for i, v in enumerate(vcache):
                 v.cacherank = i
                 v.calcScore()
@@ -210,32 +220,8 @@ class Mesh:
         self.verts = vertschedule
         self.tris = trischedule
 
-    def calcNeighbors(self):
-        edges = {}
-        for i, (v0, v1, v2) in enumerate(self.tris):
-            e0 = (min(v0.index, v1.index), max(v0.index, v1.index))
-            e1 = (min(v1.index, v2.index), max(v1.index, v2.index))
-            e2 = (min(v2.index, v0.index), max(v2.index, v0.index))
-            try: edges[e0].append(i)
-            except: edges[e0] = [i]
-            try: edges[e1].append(i)
-            except: edges[e1] = [i]
-            try: edges[e2].append(i)
-            except: edges[e2] = [i]
-        neighbors = []
-        for i, (v0, v1, v2) in enumerate(self.tris):
-            e0 = edges[(min(v0.index, v1.index), max(v0.index, v1.index))]
-            e1 = edges[(min(v1.index, v2.index), max(v1.index, v2.index))]
-            e2 = edges[(min(v2.index, v0.index), max(v2.index, v0.index))]
-            match0 = match1 = match2 = -1
-            if len(e0) == 2: match0 = e0[e0.index(i)^1]
-            if len(e1) == 2: match1 = e1[e1.index(i)^1]
-            if len(e2) == 2: match2 = e2[e2.index(i)^1]
-            neighbors.append((match0, match1, match2))
-        self.neighbors = neighbors
-
     def meshData(self, iqm):
-        return [ iqm.addText(self.name), iqm.addText(self.material), self.firstvert, len(self.verts), self.firsttri, len(self.tris) ]
+        return [iqm.addText(self.name), iqm.addText(self.material), self.firstvert, len(self.verts), self.firsttri, len(self.tris)]
 
 
 class Bone:
@@ -246,12 +232,12 @@ class Bone:
         self.parent = parent
         self.matrix = matrix
         self.localmatrix = matrix
-        if self.parent:
-            self.localmatrix = parent.matrix.inverted() * self.localmatrix
+        # if self.parent:
+        #     self.localmatrix = parent.matrix.inverted() * self.localmatrix
         self.numchannels = 0
         self.channelmask = 0
-        self.channeloffsets = [ 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10 ]
-        self.channelscales = [ -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10 ]
+        self.channeloffsets = [1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10, 1.0e10]
+        self.channelscales = [-1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10, -1.0e10]
 
     def jointData(self, iqm):
         if self.parent:
@@ -267,14 +253,33 @@ class Bone:
         scale.x = round(scale.x*0x10000)/0x10000
         scale.y = round(scale.y*0x10000)/0x10000
         scale.z = round(scale.z*0x10000)/0x10000
-        return [ iqm.addText(self.name), parent, pos.x, pos.y, pos.z, orient.x, orient.y, orient.z, orient.w, scale.x, scale.y, scale.z ]
+
+        inverse = self.localmatrix.inverted()
+        inv_pos = inverse.to_translation()
+        inv_orient = inverse.to_quaternion()
+        inv_orient.normalize()
+        if inv_orient.w > 0:
+            inv_orient.negate()
+        inv_scale = inverse.to_scale()
+        inv_scale.x = round(inv_scale.x*0x10000)/0x10000
+        inv_scale.y = round(inv_scale.y*0x10000)/0x10000
+        inv_scale.z = round(inv_scale.z*0x10000)/0x10000
+        return [
+            iqm.addText(self.name),
+            parent, pos.x, pos.y, pos.z,
+            inv_pos.x, inv_pos.y, inv_pos.z,
+            orient.x, orient.y, orient.z, orient.w,
+            inv_orient.x, inv_orient.y, inv_orient.z, inv_orient.w,
+            scale.x, scale.y, scale.z,
+            inv_scale.x, inv_scale.y, inv_scale.z
+        ]
 
     def poseData(self, iqm):
         if self.parent:
             parent = self.parent.index
         else:
             parent = -1
-        return [ parent, self.channelmask ] + self.channeloffsets + self.channelscales
+        return [parent, self.channelmask] + self.channeloffsets + self.channelscales
 
     def calcChannelMask(self):
         for i in range(0, 10):
@@ -289,7 +294,7 @@ class Bone:
 
 
 class Animation:
-    def __init__(self, name, frames, fps = 0.0, flags = 0):
+    def __init__(self, name, frames, fps=0.0, flags=0):
         self.name = name
         self.frames = frames
         self.fps = fps
@@ -321,14 +326,14 @@ class Animation:
                 bone.channelscales[9] = max(bone.channelscales[9], scale.z)
 
     def animData(self, iqm):
-        return [ iqm.addText(self.name), self.firstframe, len(self.frames), self.fps, self.flags ]
+        return [iqm.addText(self.name), self.firstframe, len(self.frames), self.fps, self.flags]
 
     def frameData(self, bones):
         data = b''
         for frame in self.frames:
             for i, bone in enumerate(bones):
                 loc, quat, scale, mat = frame[i]
-                if (bone.channelmask&0x7F) == 0x7F:
+                if(bone.channelmask & 0x7F) == 0x7F:
                     lx = int(round((loc.x - bone.channeloffsets[0]) / bone.channelscales[0]))
                     ly = int(round((loc.y - bone.channeloffsets[1]) / bone.channelscales[1]))
                     lz = int(round((loc.z - bone.channeloffsets[2]) / bone.channelscales[2]))
@@ -399,7 +404,7 @@ class Animation:
             radius = math.sqrt(radius)
         else:
             bbmin = bbmax = mathutils.Vector((0.0, 0.0, 0.0))
-        return IQM_BOUNDS.pack(bbmin.x, bbmin.y, bbmin.z, bbmax.x, bbmax.y, bbmax.z, xyradius, radius)
+        return LMESH_BOUNDS.pack(bbmin.x, bbmin.y, bbmin.z, bbmax.x, bbmax.y, bbmax.z, xyradius, radius)
 
     def boundsData(self, bones, meshes):
         invbase = []
@@ -412,7 +417,7 @@ class Animation:
         return data
 
 
-class IQMFile:
+class LMESHFile:
     def __init__(self):
         self.textoffsets = {}
         self.textdata = b''
@@ -479,46 +484,23 @@ class IQMFile:
         if self.numverts <= 0:
             return
 
-        file.write(IQM_VERTEXARRAY.pack(IQM_POSITION, 0, IQM_FLOAT, 3, offset))
-        offset += self.numverts * struct.calcsize('<3f')
-        file.write(IQM_VERTEXARRAY.pack(IQM_TEXCOORD, 0, IQM_FLOAT, 2, offset))
-        offset += self.numverts * struct.calcsize('<2f')
-        file.write(IQM_VERTEXARRAY.pack(IQM_NORMAL, 0, IQM_FLOAT, 3, offset))
-        offset += self.numverts * struct.calcsize('<3f')
-        file.write(IQM_VERTEXARRAY.pack(IQM_TANGENT, 0, IQM_FLOAT, 4, offset))
-        offset += self.numverts * struct.calcsize('<4f')
-        if self.joints:
-            file.write(IQM_VERTEXARRAY.pack(IQM_BLENDINDEXES, 0, IQM_UBYTE, 4, offset))
-            offset += self.numverts * struct.calcsize('<4B')
-            file.write(IQM_VERTEXARRAY.pack(IQM_BLENDWEIGHTS, 0, IQM_UBYTE, 4, offset))
-            offset += self.numverts * struct.calcsize('<4B')
         hascolors = any(mesh.verts and mesh.verts[0].color for mesh in self.meshes)
-        if hascolors:
-            file.write(IQM_VERTEXARRAY.pack(IQM_COLOR, 0, IQM_UBYTE, 4, offset))
-            offset += self.numverts * struct.calcsize('<4B')
-
         for mesh in self.meshes:
             for v in mesh.verts:
                 file.write(struct.pack('<3f', *v.coord))
-        for mesh in self.meshes:
-            for v in mesh.verts:
-                file.write(struct.pack('<2f', *v.uv))
-        for mesh in self.meshes:
-            for v in mesh.verts:
                 file.write(struct.pack('<3f', *v.normal))
-        for mesh in self.meshes:
-            for v in mesh.verts:
+                file.write(struct.pack('<2f', *v.uv))
                 file.write(struct.pack('<4f', v.tangent.x, v.tangent.y, v.tangent.z, v.bitangent))
-        if self.joints:
-            for mesh in self.meshes:
-                for v in mesh.verts:
+
+                if self.joints:
+                    # blend indexes
+                    print('%d %d %d %d' % (v.weights[0][1], v.weights[1][1], v.weights[2][1], v.weights[3][1]))
                     file.write(struct.pack('<4B', v.weights[0][1], v.weights[1][1], v.weights[2][1], v.weights[3][1]))
-            for mesh in self.meshes:
-                for v in mesh.verts:
+
+                    # blend weights
                     file.write(struct.pack('<4B', v.weights[0][0], v.weights[1][0], v.weights[2][0], v.weights[3][0]))
-        if hascolors:
-            for mesh in self.meshes:
-                for v in mesh.verts:
+
+                if hascolors:
                     if v.color:
                         file.write(struct.pack('<4B', v.color[0], v.color[1], v.color[2], v.color[3]))
                     else:
@@ -528,18 +510,9 @@ class IQMFile:
         for mesh in self.meshes:
             for (v0, v1, v2) in mesh.tris:
                 file.write(struct.pack('<3I', v0.index + mesh.firstvert, v1.index + mesh.firstvert, v2.index + mesh.firstvert))
-        for mesh in self.meshes:
-            for (n0, n1, n2) in mesh.neighbors:
-                if n0 >= 0: n0 += mesh.firsttri
-                else: n0 = 0xFFFFFFFF
-                if n1 >= 0: n1 += mesh.firsttri
-                else: n1 = 0xFFFFFFFF
-                if n2 >= 0: n2 += mesh.firsttri
-                else: n2 = 0xFFFFFFFF
-                file.write(struct.pack('<3I', n0, n1, n2))
 
-    def export(self, file, usebbox = True):
-        self.filesize = IQM_HEADER.size
+    def export(self, file, usebbox=True):
+        self.filesize = LMESH_HEADER.size
         if self.textdata:
             while len(self.textdata) % 4:
                 self.textdata += b'\x00'
@@ -549,49 +522,42 @@ class IQMFile:
             ofs_text = 0
         if self.meshdata:
             ofs_meshes = self.filesize
-            self.filesize += len(self.meshdata) * IQM_MESH.size
+            self.filesize += len(self.meshdata) * LMESH_MESH.size
         else:
             ofs_meshes = 0
         if self.numverts > 0:
-            ofs_vertexarrays = self.filesize
-            num_vertexarrays = 4
-            if self.joints:
-                num_vertexarrays += 2
-            hascolors = any(mesh.verts and mesh.verts[0].color for mesh in self.meshes)
-            if hascolors:
-                num_vertexarrays += 1
-            self.filesize += num_vertexarrays * IQM_VERTEXARRAY.size
             ofs_vdata = self.filesize
-            self.filesize += self.numverts * struct.calcsize('<3f2f3f4f')
+            # TODO: separate the elements for the vertex
+            vertex_size = struct.calcsize('<3f2f3f4f')
+
+            hascolors = any(mesh.verts and mesh.verts[0].color for mesh in self.meshes)
+
             if self.joints:
-                self.filesize += self.numverts * struct.calcsize('<4B4B')
+                vertex_size += struct.calcsize('<4B4B')
             if hascolors:
-                self.filesize += self.numverts * struct.calcsize('<4B')
+                vertex_size += struct.calcsize('<4B')
+
+            self.filesize += self.numverts * vertex_size
         else:
-            ofs_vertexarrays = 0
-            num_vertexarrays = 0
             ofs_vdata = 0
         if self.numtris > 0:
             ofs_triangles = self.filesize
-            self.filesize += self.numtris * IQM_TRIANGLE.size
-            ofs_neighbors = self.filesize
-            self.filesize += self.numtris * IQM_TRIANGLE.size
+            self.filesize += self.numtris * LMESH_TRIANGLE.size
         else:
             ofs_triangles = 0
-            ofs_neighbors = 0
         if self.jointdata:
             ofs_joints = self.filesize
-            self.filesize += len(self.jointdata) * IQM_JOINT.size
+            self.filesize += len(self.jointdata) * LMESH_JOINT.size
         else:
             ofs_joints = 0
         if self.posedata:
             ofs_poses = self.filesize
-            self.filesize += len(self.posedata) * IQM_POSE.size
+            self.filesize += len(self.posedata) * LMESH_POSE.size
         else:
             ofs_poses = 0
         if self.animdata:
             ofs_anims = self.filesize
-            self.filesize += len(self.animdata) * IQM_ANIMATION.size
+            self.filesize += len(self.animdata) * LMESH_ANIMATION.size
         else:
             ofs_anims = 0
         falign = 0
@@ -604,22 +570,31 @@ class IQMFile:
             ofs_frames = 0
         if usebbox and self.numverts > 0 and self.numframes > 0:
             ofs_bounds = self.filesize
-            self.filesize += self.numframes * IQM_BOUNDS.size
+            self.filesize += self.numframes * LMESH_BOUNDS.size
         else:
             ofs_bounds = 0
 
-        file.write(IQM_HEADER.pack('INTERQUAKEMODEL'.encode('ascii'), 2, self.filesize, 0, len(self.textdata), ofs_text, len(self.meshdata), ofs_meshes, num_vertexarrays, self.numverts, ofs_vertexarrays, self.numtris, ofs_triangles, ofs_neighbors, len(self.jointdata), ofs_joints, len(self.posedata), ofs_poses, len(self.animdata), ofs_anims, self.numframes, self.framesize, ofs_frames, ofs_bounds, 0, 0, 0, 0))
+        print('num_meshes: %d, ofs_meshes %d' % (len(self.meshdata), ofs_meshes))
+        file.write(LMESH_HEADER.pack(
+            '_LMesh_'.encode('ascii'), 2, self.filesize,
+            0, vertex_size, len(self.textdata), ofs_text,
+            len(self.meshdata), ofs_meshes, self.numverts, ofs_vdata,
+            self.numtris, ofs_triangles, len(self.jointdata), ofs_joints,
+            len(self.posedata), ofs_poses, len(self.animdata), ofs_anims,
+            self.numframes, self.framesize, ofs_frames, ofs_bounds
+        ))
+
         file.write(self.textdata)
         for mesh in self.meshdata:
-            file.write(IQM_MESH.pack(*mesh))
+            file.write(LMESH_MESH.pack(*mesh))
         self.writeVerts(file, ofs_vdata)
         self.writeTris(file)
         for joint in self.jointdata:
-            file.write(IQM_JOINT.pack(*joint))
+            file.write(LMESH_JOINT.pack(*joint))
         for pose in self.posedata:
-            file.write(IQM_POSE.pack(*pose))
+            file.write(LMESH_POSE.pack(*pose))
         for anim in self.animdata:
-            file.write(IQM_ANIMATION.pack(*anim))
+            file.write(LMESH_ANIMATION.pack(*anim))
         for anim in self.anims:
             file.write(anim.frameData(self.joints))
         file.write(b'\x00' * falign)
@@ -659,8 +634,8 @@ def derigifyBones(context, armature, scale):
         if not orgbone:
             splitname = name.rfind('.')
             if splitname >= 0 and name[splitname+1:].isdigit():
-                 orgname = name[:splitname]
-                 orgbone = orgbones.get(orgname)
+                orgname = name[:splitname]
+                orgbone = orgbones.get(orgname)
         org2defs[orgname].append(name)
         def2org[name] = orgname
     for defs in org2defs.values():
@@ -683,7 +658,7 @@ def derigifyBones(context, armature, scale):
 
     bones = {}
     worldmatrix = armature.matrix_world
-    worklist = [ bone for bone in defbones if bone not in defparent ]
+    worklist = [bone for bone in defbones if bone not in defparent]
     for index, bname in enumerate(worklist):
         bone = defbones[bname]
         bonematrix = worldmatrix * bone.matrix_local
@@ -699,7 +674,7 @@ def collectBones(context, armature, scale):
     data = armature.data
     bones = {}
     worldmatrix = armature.matrix_world
-    worklist = [ bone for bone in data.bones.values() if not bone.parent ]
+    worklist = [bone for bone in data.bones.values() if not bone.parent]
     for index, bone in enumerate(worklist):
         bonematrix = worldmatrix * bone.matrix_local
         if scale != 1.0:
@@ -712,7 +687,7 @@ def collectBones(context, armature, scale):
     return bones
 
 
-def collectAnim(context, armature, scale, bones, action, startframe = None, endframe = None):
+def collectAnim(context, armature, scale, bones, action, startframe=None, endframe=None):
     if not startframe or not endframe:
         startframe, endframe = action.frame_range
         startframe = int(startframe)
@@ -753,13 +728,13 @@ def collectAnims(context, armature, scale, bones, animspecs):
         print('Armature has no animation data')
         return []
     actions = bpy.data.actions
-    animspecs = [ spec.strip() for spec in animspecs.split(',') ]
+    animspecs = [spec.strip() for spec in animspecs.split(',')]
     anims = []
     scene = context.scene
     oldaction = armature.animation_data.action
     oldframe = scene.frame_current
     for animspec in animspecs:
-        animspec = [ arg.strip() for arg in animspec.split(':') ]
+        animspec = [arg.strip() for arg in animspec.split(':')]
         animname = animspec[0]
         if animname not in actions:
             print('Action "%s" not found in current armature' % animname)
@@ -787,9 +762,9 @@ def collectAnims(context, armature, scale, bones, animspecs):
     return anims
 
 
-def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False):
+def collectMeshes(context, bones, scale, matfun, useskel=True, usecol=False):
     vertwarn = []
-    objs = context.selected_objects #context.scene.objects
+    objs = context.selected_objects  # context.scene.objects
     meshes = []
     for obj in objs:
         if obj.type == 'MESH':
@@ -822,7 +797,7 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False)
                 if len(face.vertices) < 3:
                     continue
 
-                if all([ data.vertices[i].co == data.vertices[face.vertices[0]] for i in face.vertices[1:] ]):
+                if all([data.vertices[i].co == data.vertices[face.vertices[0]] for i in face.vertices[1:]]):
                     continue
 
                 uvface = uvfaces and uvfaces[face.index]
@@ -929,12 +904,12 @@ def collectMeshes(context, bones, scale, matfun, useskel = True, usecol = False)
     for mesh in meshes:
         mesh.optimize()
         mesh.calcTangents()
-        mesh.calcNeighbors()
         print('%s %s: generated %d triangles' % (mesh.name, mesh.material, len(mesh.tris)))
 
     return meshes
 
-def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True, usecol = False, scale = 1.0, animspecs = None, matfun = (lambda prefix, image: image), derigify = False):
+
+def exportLMESH(context, filename, usemesh=True, useskel=True, usebbox=True, usecol=False, scale=1.0, animspecs=None, matfun=(lambda prefix, image: image), derigify=False):
     armature = findArmature(context)
     if useskel and not armature:
         print('No armature selected')
@@ -961,8 +936,7 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
     else:
         anims = []
 
-
-    iqm = IQMFile()
+    iqm = LMESHFile()
     iqm.addMeshes(meshes)
     iqm.addJoints(bonelist)
     iqm.addAnims(anims)
@@ -983,7 +957,7 @@ def exportIQM(context, filename, usemesh = True, useskel = True, usebbox = True,
         print('No %s file was generated' % ('LMesh'))
 
 
-class ExportIQM(bpy.types.Operator, ExportHelper):
+class ExportLMESH(bpy.types.Operator, ExportHelper):
     '''Export an LMesh Model file'''
     bl_idname = "export.lmesh"
     bl_label = 'Export LMesh'
@@ -997,7 +971,7 @@ class ExportIQM(bpy.types.Operator, ExportHelper):
     useskel = BoolProperty(name="Skeleton", description="Generate skeleton", default=True)
     usebbox = BoolProperty(name="Bounding boxes", description="Generate bounding boxes", default=True)
     usescale = FloatProperty(name="Scale", description="Scale of exported model", default=1.0, min=0.0, step=50, precision=2)
-    matfmt = EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="m+i-e")
+    matfmt = EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="i")
     derigify = BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
 
     def execute(self, context):
@@ -1007,7 +981,7 @@ class ExportIQM(bpy.types.Operator, ExportHelper):
             matfun = lambda prefix, image: prefix
         else:
             matfun = lambda prefix, image: image
-        exportIQM(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.usescale, self.properties.animspec, matfun, self.properties.derigify)
+        exportLMESH(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.usescale, self.properties.animspec, matfun, self.properties.derigify)
         return {'FINISHED'}
 
     def check(self, context):
@@ -1018,15 +992,15 @@ class ExportIQM(bpy.types.Operator, ExportHelper):
         return False
 
 
-
 def menu_func(self, context):
     default_path = os.path.splitext(bpy.data.filepath)[0] + ".lmesh"
-    self.layout.operator(ExportIQM.bl_idname, text="LMesh Model (.lmesh)").filepath = default_path
+    self.layout.operator(ExportLMESH.bl_idname, text="LMesh Model (.lmesh)").filepath = default_path
 
 
 def register():
     bpy.utils.register_module(__name__)
     bpy.types.INFO_MT_file_export.append(menu_func)
+
 
 def unregister():
     bpy.utils.unregister_module(__name__)

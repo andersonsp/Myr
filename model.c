@@ -77,6 +77,8 @@ struct _GModel {
   IqmBounds *bounds;
 
   GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
+  GVec *base_trans, *inv_trans;
+  GQuat *base_rot, *inv_rot;
 };
 
 
@@ -105,13 +107,22 @@ static int loadiqmmeshes( GModel *mdl, const char *filename, const LMeshHeader *
     for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
     for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
 
-    mdl->base = g_new( GDualQuat, hdr->num_joints );
-    mdl->inversebase = g_new( GDualQuat, hdr->num_joints );
+    mdl->base_trans = g_new( GVec, hdr->num_joints );
+    mdl->inv_trans = g_new( GVec, hdr->num_joints );
+
+    mdl->base_rot = g_new( GQuat, hdr->num_joints );
+    mdl->inv_rot = g_new( GQuat, hdr->num_joints );
+
     for( i = 0; i < (int) hdr->num_joints; i++ ) {
         LMeshJoint *j = &joints[i];
         g_quat_normalize( &j->rotate );
-        g_dual_quat_from_quat_vec( &mdl->base[i], &j->rotate, &j->translate );
-        g_dual_quat_from_quat_vec( &mdl->inversebase[i], &j->inv_rotate, &j->inv_translate );
+        mdl->base_trans[i] = j->translate;
+        mdl->inv_rot[i] = mdl->base_rot[i] = j->rotate;
+
+        g_quat_invert( &mdl->inv_rot[i] );
+        g_quat_normalize( &mdl->inv_rot[i] );
+        g_vec_mul_scalar( &mdl->inv_trans[i], &j->translate, -1.0 );
+        g_quat_vec_mul( &mdl->inv_trans[i], &mdl->inv_rot[i], &mdl->inv_trans[i] );
     }
 
     GTexture tex;
@@ -143,6 +154,25 @@ static int loadiqmanims( GModel* mdl, const char *filename, const LMeshHeader *h
     unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
     // if( hdr->ofs_bounds ) mdl->bounds = (IqmBounds *)&buf[hdr->ofs_bounds];
 
+    // for (int i = 0; i < nb_bones; i++) {
+    //   const rend::Bone& bone = skeleton.bones[i];
+    //   const rend::Keyframe& kf = keyframes[i + frame * nb_bones];
+
+    //   // Calculate inverse base pose
+    //   math::quat q0 = qConjugate(bone.base_pose.rotation);
+    //   math::vec3 p0 = qTransformPos(q0, v3Negate(bone.base_pose.position));
+
+    //   // Concatenate with animation keyframe
+    //   math::quat q = qMultiply(q0, kf.rotation);
+    //   math::vec3 p = qTransformPos(kf.rotation, p0);
+    //   p = v3Add(p, kf.position);
+
+    //   // Set the transform
+    //   math::mat4& transform = transforms[i];
+    //   transform = qToMat4(q);
+    //   transform.r[3] = math::v4Make(p.x, p.y, p.z, 1);
+    // }
+
     int i, j;
     for( i = 0; i < (int)hdr->num_frames; i++ ) {
         for( j = 0; j < (int)hdr->num_poses; j++ ) {
@@ -169,11 +199,22 @@ static int loadiqmanims( GModel* mdl, const char *filename, const LMeshHeader *h
             int k = i*hdr->num_poses + j;
             g_quat_normalize( &rotate );
 
-            g_dual_quat_from_quat_vec( &mdl->frames[k], &rotate, &translate );
-            g_dual_quat_mul( &mdl->frames[k], &mdl->frames[k], &mdl->inversebase[j] );
+            // g_dual_quat_mul( &mdl->frames[k], &mdl->frames[k], &mdl->inversebase[j] );
+            GVec rv;
+            GQuat rq;
+            g_quat_mul( &rq, &rotate, &mdl->inv_rot[j] );
+            g_quat_normalize( &rq );
+            g_quat_vec_mul( &rv, &rotate, &mdl->inv_trans[j] );
+            g_vec_add( &rv, &rv, &translate );
 
-            if( p->parent >= 0)
-                g_dual_quat_mul( &mdl->frames[k], &mdl->base[p->parent], &mdl->frames[k] );
+            g_dual_quat_from_quat_vec( &mdl->frames[k], &rq, &rv );
+
+            if( p->parent >= 0) {
+                GDualQuat parent_dq;
+                g_dual_quat_from_quat_vec( &parent_dq, &mdl->base_rot[p->parent], &mdl->base_trans[p->parent] );
+                g_dual_quat_mul( &mdl->frames[k], &parent_dq, &mdl->frames[k] );
+            }
+
         }
     }
 

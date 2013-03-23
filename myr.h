@@ -74,6 +74,7 @@ void g_quat_invert( GQuat *q );
 void g_quat_normalize( GQuat *q );
 void g_quat_mul( GQuat *r, GQuat *q1, GQuat *q2 );
 
+void g_quat_lerp( GQuat* r, GQuat* d1, GQuat* d2, float t );
 void g_quat_scale_add( GQuat *r, GQuat *q, float sc );
 void g_quat_vec_mul( GVec *r, GQuat *q, GVec *v );
 

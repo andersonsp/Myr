@@ -77,8 +77,8 @@ struct _GModel {
   IqmBounds *bounds;
 
   GDualQuat *base, *inversebase, *outframe, *frames; //in iqm demo its a 3x4 matrix
-  GVec *base_trans, *inv_trans;
-  GQuat *base_rot, *inv_rot;
+  GVec *base_trans, *inv_trans, *frame_trans, *out_trans;
+  GQuat *base_rot, *inv_rot, *frame_rot, *out_rot;
 };
 
 
@@ -150,6 +150,11 @@ static int loadiqmanims( GModel* mdl, const char *filename, const LMeshHeader *h
     mdl->outframe = g_new( GDualQuat, hdr->num_joints);
     mdl->out_verts = g_new( LMeshVertex, mdl->num_verts );
 
+    mdl->frame_rot = g_new( GQuat, hdr->num_frames * hdr->num_poses );
+    mdl->frame_trans = g_new( GVec, hdr->num_frames * hdr->num_poses );
+    mdl->out_rot = g_new( GQuat, hdr->num_joints);
+    mdl->out_trans = g_new( GVec, hdr->num_joints);
+
     //TODO: load bounds data
     unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
     // if( hdr->ofs_bounds ) mdl->bounds = (IqmBounds *)&buf[hdr->ofs_bounds];
@@ -200,19 +205,23 @@ static int loadiqmanims( GModel* mdl, const char *filename, const LMeshHeader *h
             g_quat_normalize( &rotate );
 
             // g_dual_quat_mul( &mdl->frames[k], &mdl->frames[k], &mdl->inversebase[j] );
-            GVec rv;
-            GQuat rq;
+            GVec rv, pv;
+            GQuat rq, pq;
             g_quat_mul( &rq, &rotate, &mdl->inv_rot[j] );
-            g_quat_normalize( &rq );
             g_quat_vec_mul( &rv, &rotate, &mdl->inv_trans[j] );
             g_vec_add( &rv, &rv, &translate );
-
-            g_dual_quat_from_quat_vec( &mdl->frames[k], &rq, &rv );
+            // g_quat_normalize( &rq );
 
             if( p->parent >= 0) {
-                GDualQuat parent_dq;
-                g_dual_quat_from_quat_vec( &parent_dq, &mdl->base_rot[p->parent], &mdl->base_trans[p->parent] );
-                g_dual_quat_mul( &mdl->frames[k], &parent_dq, &mdl->frames[k] );
+                g_quat_mul( &pq, &mdl->base_rot[p->parent], &rq );
+                g_quat_vec_mul( &pv, &mdl->base_rot[p->parent], &rv );
+                g_vec_add( &pv, &pv, &mdl->base_trans[p->parent] );
+
+                mdl->frame_trans[k] = pv;
+                mdl->frame_rot[k] = pq;
+            } else {
+                mdl->frame_trans[k] = rv;
+                mdl->frame_rot[k] = rq;
             }
 
         }
@@ -235,35 +244,53 @@ static void animateiqm( GModel *mdl, float curframe ) {
 
     int frame1 = (int)floor(curframe), frame2 = frame1 + 1;
     float frameoffset = curframe - frame1;
-    frame1 %= mdl->num_frames;
-    frame2 %= mdl->num_frames;
-    GDualQuat *d1 = &mdl->frames[frame1 * mdl->num_joints],
-    *d2 = &mdl->frames[frame2 * mdl->num_joints];
+    frame1 = (frame1 % mdl->num_frames) * mdl->num_joints;
+    frame2 = (frame2 % mdl->num_frames) * mdl->num_joints;
 
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for( i = 0; i < mdl->num_joints; i++ ) {
-        GDualQuat r;// = d1[i];
-        g_dual_quat_lerp( &r, &d1[i], &d2[i], frameoffset );
-        if( mdl->joints[i].parent >= 0) g_dual_quat_mul( &mdl->outframe[i], &mdl->outframe[mdl->joints[i].parent], &r );
-        else mdl->outframe[i] = r;
+
+        GVec  rv, dv1 = mdl->frame_trans[frame1+i], dv2 = mdl->frame_trans[frame2+i];
+        GQuat rq, dq1 = mdl->frame_rot[frame1+i],   dq2 = mdl->frame_rot[frame2+i];
+
+        // g_dual_quat_lerp( &r, &d1, &d2, frameoffset );
+        g_vec_lerp( &rv, &dv1, &dv2, frameoffset );
+        g_quat_lerp( &rq, &dq1, &dq2, frameoffset );
+        if( mdl->joints[i].parent >= 0) {
+          int parent = mdl->joints[i].parent;
+
+          g_quat_mul( &mdl->out_rot[i], &mdl->out_rot[parent], &rq );
+          g_quat_vec_mul( &mdl->out_trans[i], &mdl->out_rot[parent], &rv );
+          g_vec_add( &mdl->out_trans[i], &mdl->out_trans[i], &mdl->out_trans[parent] );
+
+          g_quat_normalize( &mdl->out_rot[i] );
+        } else {
+          mdl->out_trans[i] = rv;
+          mdl->out_rot[i] = rq;
+        }
     }
 
     // The actual vertex generation based on the matrixes follows...
     for( i = 0; i < mdl->num_verts; i++) {
         LMeshVertex* v = &mdl->verts[i];
         // weighted blend of bone transformations assigned to this vert ( here for fixed pipeline )
-        GDualQuat r = {{.0, .0, .0, .0}, {.0, .0, .0, .0}};
-        g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[0]], (v->blendweight[0]/255.0f) );
-        for( j = 1; j < 4 && v->blendweight[j]; j++ )
-          g_dual_quat_scale_add( &r, &mdl->outframe[v->blendindex[j]], (v->blendweight[j]/255.0f) );
+        GQuat rq = {.0, .0, .0, .0};
+        GVec rv = {.0, .0, .0};
+        for( j = 0; j < 4 && v->blendweight[j]; j++ ) {
+            int blend = v->blendindex[j];
+            float weight = v->blendweight[j] / 255.0f;
 
-        g_dual_quat_normalize( &r );
+            g_quat_scale_add( &rq, &mdl->out_rot[blend], weight );
+            g_vec_scale_add( &rv, &mdl->out_trans[blend], weight );
+        }
+        g_quat_normalize( &rq );
 
         // Transform attributes by the blended dual quaternion.
         LMeshVertex* ov = &mdl->out_verts[i];
-        g_dual_quat_vec_mul( &ov->loc, &r, &v->loc );
+        g_quat_vec_mul( &ov->loc, &rq, &v->loc );
+        g_vec_add( &ov->loc, &ov->loc, &rv );
 
 //  *dstnorm = matnorm.transform(*srcnorm);
         // Note that input tangent data has 4 coordinates,

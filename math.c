@@ -239,10 +239,23 @@ void g_quat_mul( GQuat *r, GQuat *q1, GQuat *q2 ) {
 }
 
 void g_quat_scale_add( GQuat *r, GQuat *q, float sc ) {
-    r->x += q->x * sc;
-    r->y += q->y * sc;
-    r->z += q->z * sc;
-    r->w += q->w * sc;
+    float dot_real = r->x*q->x + r->y*q->y + r->z*q->z + r->w*q->w;
+    float k = dot_real < 0 ? -sc : sc;
+    // float k = sc;
+    r->x += q->x * k;
+    r->y += q->y * k;
+    r->z += q->z * k;
+    r->w += q->w * k;
+}
+
+void g_quat_lerp( GQuat* r, GQuat* d1, GQuat* d2, float t ) {
+    float dot_real = d1->x*d2->x + d1->y*d2->y + d1->z*d2->z + d1->w*d2->w;
+    float k = dot_real < 0 ? -t : t;
+
+    r->x = d1->x*(1-t) + d2->x*k;
+    r->y = d1->y*(1-t) + d2->y*k;
+    r->z = d1->z*(1-t) + d2->z*k;
+    r->w = d1->w*(1-t) + d2->w*k;
 }
 
 void g_quat_vec_mul( GVec *r, GQuat *q, GVec *v ) {

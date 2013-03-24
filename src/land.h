@@ -39,6 +39,7 @@ typedef struct { short s, t;     } Vec2s;
 typedef struct { float s, t;     } Vec2;
 typedef struct { float x,y,z,w;  } Vec4;
 typedef struct { float x,y,z,w;  } Quat;
+typedef struct { Quat q, d;      } DualQuat;
 
 void mat4_identity( Mat4 *mat );
 void mat4_mul( Mat4 *out, const Mat4 *m1, const Mat4 *m2 );
@@ -52,16 +53,17 @@ Vec* vec_sub( Vec* r, const Vec* a, const Vec* b );
 Vec* vec_scale( Vec* r, const Vec* a, float s );
 Vec* vec_cross( Vec* r, const Vec* a, const Vec* b );
 Vec* vec_normalize( Vec* r, const Vec* a );
-Vec* vec_rotate( Vec* r, const Vec* a, const Vec* b, float angle );
+Vec* vec_lerp( Vec *r, Vec *a, Vec *b, float weight );
 float vec_dot( const Vec* a, const Vec* b );
 float vec_len( const Vec* a );
 
+Vec* quat_vec_mul( Vec *r, const Quat *q, const Vec *v );
 Quat* quat_invert( Quat *r, const Quat *q );
 Quat* quat_normalize( Quat *r, const Quat *q );
 Quat* quat_mul( Quat *r, const Quat *q1, const Quat *q2 );
+Quat* quat_lerp( Quat* r, Quat* d1, Quat* d2, float t );
 Quat* quat_from_axis_angle( Quat *q, const Vec *axis, float ang );
 Quat* quat_from_mat4( Quat* q, const Mat4* m );
-Vec* quat_vec_mul( Vec *r, const Quat *q, const Vec *v );
 
 static const Vec zero   = { 0.0, 0.0, 0.0 };
 static const Vec x_axis = { 1.0, 0.0, 0.0 };
@@ -80,7 +82,7 @@ typedef struct {
 
 typedef struct {
     GLuint vs, fs, object;
-    GLint u_mvp, u_sampler; // uniforms
+    GLint u_mvp, u_sampler, u_bones; // uniforms
 } Program;
 
 int texture_load( Texture *tex, const char* filename );
@@ -96,6 +98,7 @@ typedef struct _Model Model;
 
 Model* model_load( const char *filename );
 void model_destroy( Model* mdl );
+void model_setup_buffers( Model *mdl );
 void model_draw( Model* mdl, Program* program, Mat4* mvp, float frame );
 int model_collision( Model *mdl, Vec* pos, Vec* dir, float radius, Vec *result );
 float model_calculate_bounding_sphere( Model *mdl );
@@ -144,12 +147,11 @@ void camera_update( Camera* cam, const Vec* target, float pitch, float heading, 
 typedef struct {
     Model *model;
     Program program;
-    float rr; //squared radius
+    float anim_frame, rr; //squared radius
     Vec pos;
     Quat rot;
 
-    int hits;
-    int type;
+    int hits, type;
 } Object;
 
 typedef struct {

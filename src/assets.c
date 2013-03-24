@@ -77,9 +77,9 @@ void tex_font_render ( TexFont *fnt, char *str ){
         if( *str >= fnt->start && *str < fnt->end ) {
             c = *str - fnt->start;
             glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y0 );
-            glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y1 );
-            glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y1 );
             glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v1); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y0 );
+            glTexCoord2f(fnt->glyph[ c ].u1, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x1, y+fnt->glyph[ c ].y1 );
+            glTexCoord2f(fnt->glyph[ c ].u0, fnt->glyph[ c ].v0); glVertex2f( x+fnt->glyph[ c ].x0, y+fnt->glyph[ c ].y1 );
 
             x += fnt->glyph[ c ].advance;
         }

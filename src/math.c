@@ -142,6 +142,13 @@ Vec* vec_normalize( Vec* r, const Vec* a ) {
     return r;
 }
 
+Vec* vec_lerp( Vec *r, Vec *a, Vec *b, float t ) {
+    r->x = a->x + t * (b->x - a->x);
+    r->y = a->y + t * (b->y - a->y);
+    r->z = a->z + t * (b->z - a->z);
+    return r;
+}
+
 float vec_dot( const Vec* a, const Vec* b ) {
     return a->x*b->x + a->y*b->y + a->z*b->z;
 }
@@ -150,34 +157,7 @@ float vec_len( const Vec* a ) {
     return (float) sqrt( a->x*a->x + a->y*a->y + a->z*a->z );
 }
 
-// Rotate a around b by angle, store in result.
-Vec* vec_rotate( Vec* r, const Vec* a, const Vec* b, float angle ) {
-    float c = cosf(angle);
-    float s = sinf(angle);
 
-    Vec m1, m2, m3;
-    vec_scale( &m1, b, b->x * (1 - c) );
-    vec_scale( &m2, b, b->y * (1 - c) );
-    vec_scale( &m3, b, b->z * (1 - c) );
-
-    m1.x += c;
-    m1.y += b->z * s;
-    m1.z -= b->y * s;
-
-    m2.x -= b->z * s;
-    m2.y += c;
-    m2.z += b->x * s;
-
-    m3.x += b->y * s;
-    m3.y -= b->x * s;
-    m3.z += c;
-
-    r->x = vec_dot( a, &m1 );
-    r->y = vec_dot( a, &m2 );
-    r->z = vec_dot( a, &m3 );
-
-    return r;
-}
 
 
 Quat* quat_invert( Quat *r, const Quat *q ) {
@@ -229,6 +209,17 @@ Vec* quat_vec_mul( Vec *r, const Quat *q, const Vec *v ) {
     r->x = temp.x;
     r->y = temp.y;
     r->z = temp.z;
+    return r;
+}
+
+Quat* quat_lerp( Quat* r, Quat* d1, Quat* d2, float t ) {
+    float dot_real = d1->x*d2->x + d1->y*d2->y + d1->z*d2->z + d1->w*d2->w;
+    float k = dot_real < 0 ? -t : t;
+
+    r->x = d1->x*(1-t) + d2->x*k;
+    r->y = d1->y*(1-t) + d2->y*k;
+    r->z = d1->z*(1-t) + d2->z*k;
+    r->w = d1->w*(1-t) + d2->w*k;
     return r;
 }
 

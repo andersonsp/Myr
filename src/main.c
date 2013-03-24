@@ -25,6 +25,41 @@ GLchar* fs_glsl =
     "    gl_FragColor = texture2D( sampler, tex_fs );\n"
     "}\n";
 
+// GLchar* skinned_model_vs_glsl =
+//     "uniform mat4 mvp;"
+//     "uniform mat4 bones[60];\n"
+//     "attribute vec3 pos;\n"
+//     "attribute vec3 normal;\n"
+//     "attribute vec2 tex;\n"
+//     "attribute vec4 bone_weight;\n"
+//     "attribute vec4 bone_id;\n"
+//     "attribute vec4 vtangent;\n"
+//     "varying vec2 tex_coord;\n"
+//     "varying vec3 norm_fs;\n"
+//     "void main(void) {\n"
+//     "    mat4 m = bones[int(bone_id.x)] * bone_weight.x;\n"
+//     "    m += bones[int(bone_id.y)] * bone_weight.y;\n"
+//     "    m += bones[int(bone_id.z)] * bone_weight.z;\n"
+//     "    m += bones[int(bone_id.w)] * bone_weight.w;\n"
+//     "    vec4 mpos = mvp*(vec4(pos, 1.0)*m);"
+//     "    gl_Position = vec4(mpos.xyz, 1.0);\n"
+//     "    mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));\n"
+//     "    norm_fs = normal * madjtrans;\n"
+//     "    vec3 mtangent = vtangent.xyz * madjtrans; // tangent not used, just here as an example\n"
+//     "    vec3 mbitangent = cross(norm_fs, mtangent) * vtangent.w; // bitangent not used, just here as an example\n"
+//     "    tex_coord = tex;\n"
+//     "}\n";
+
+// GLchar* skinned_model_fs_glsl =
+//     "varying vec2 tex_coord;\n"
+//     "varying vec3 norm_fs;\n"
+//     "uniform sampler2D sampler;\n"
+//     "void main() {\n"
+//     "    gl_FragColor = texture2D( sampler, tex_coord );\n"
+//     "}\n";
+
+
+
 typedef struct {
     Object *object;
     Object *hit;
@@ -116,6 +151,8 @@ void player_ai(Player *self, int millis) {
     // main_cam.pitch = orient.x;
 
     camera_update( &main_cam, &o->pos, orient.x, -orient.y, millis );
+
+    o->anim_frame += (millis/100.0);
 }
 
 
@@ -163,6 +200,7 @@ void g_initialize( int width, int height, void *data ) {
     p.fs = program_load_shader( fs_glsl, GL_FRAGMENT_SHADER );
     if( !p.vs || !p.fs ) g_fatal_error( "Shader compilation failed\n" );
 
+    // const char *attribs[] = { "pos", "normal", "tex", "bone_weight", "bone_id", "vtangent", 0 };
     const char *attribs[] = { "pos", "normal", "tex", 0 };
     if( !program_link(&p, attribs) ) g_fatal_error( "Shader link failed\n" );
 
@@ -172,6 +210,9 @@ void g_initialize( int width, int height, void *data ) {
     p.u_sampler = glGetUniformLocation( p.object, "sampler" );
     if( p.u_sampler == -1) g_fatal_error( "Could not bind uniform sampler\n" );
 
+    // p.u_bones = glGetUniformLocation( p.object, "bones" );
+    // if( p.u_bones == -1) g_fatal_error( "Could not bind uniform bones\n" );
+
 
     fnt = tex_font_new( "dejavu16.sfn" );
     if(!fnt) g_fatal_error( "couldn't load dejavu16.sfn font" );
@@ -180,8 +221,9 @@ void g_initialize( int width, int height, void *data ) {
     // level_mdl = model_load( "castle_map.iqm" );
     // if( !level_mdl ) g_fatal_error( "couldn't load castle_map.iqm model" );
 
-    player_mdl = model_load( "freak.lmesh" );
-    if( !player_mdl ) g_fatal_error( "couldn't load freak.lmesh model" );
+    player_mdl = model_load( "player_test.lmesh" );
+    if( !player_mdl ) g_fatal_error( "couldn't load player_test.lmesh model" );
+    model_setup_buffers( player_mdl );
 
     // landscape = object_new( (Vec){ .0f, .0f, .0f}, level_mdl, &p );
     // world_add_object( world, landscape );
@@ -211,6 +253,9 @@ void g_render( void *data ) {
 
     // draw 2D composition layer ( HUD )
     glUseProgram(0);
+    glBindBuffer( GL_ARRAY_BUFFER, 0 );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
 
@@ -224,9 +269,9 @@ void g_render( void *data ) {
     glColor4f( 1.0, 1.0, 1.0, .3 );
     glBegin(GL_QUADS);
         glVertex3f( -395.0f, 295.0f, 0.0f);              // Top Left
-        glVertex3f( 1.0f, 295.0f, 0.0f);              // Top Right
-        glVertex3f( 1.0f, 180.0f, 0.0f);              // Bottom Right
         glVertex3f( -395.0, 180.0, 0.0 );              // Bottom Left
+        glVertex3f( 1.0f, 180.0f, 0.0f);              // Bottom Right
+        glVertex3f( 1.0f, 295.0f, 0.0f);              // Top Right
     glEnd();                            // Done Drawing The Quad
 
     glEnable( GL_TEXTURE_2D );

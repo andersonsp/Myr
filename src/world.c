@@ -34,7 +34,7 @@ void object_draw( Object *self, Mat4* vp ) {
     mat4_from_quat_vec( &model, &self->rot, &self->pos );
     mat4_mul( &mvp, vp, &model );
 
-    model_draw( self->model, &self->program, &mvp, 0.0 );  //self->anim_frame
+    model_draw( self->model, &self->program, &mvp, self->anim_frame );
 }
 
 void world_draw( World *self, Camera *camera ) {

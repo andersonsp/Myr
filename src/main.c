@@ -4,60 +4,58 @@
 #define FORWARD_SPEED 6.0f
 #define GRAVITY -9.8f
 
-GLchar* vs_glsl =
-    "uniform mat4 mvp;"
-    "attribute vec3 pos;\n"
-    "attribute vec3 normal;\n"
-    "attribute vec2 tex;\n"
-    "varying vec2 tex_fs;\n"
-    "varying vec4 norm_fs;\n"
-    "void main() {\n"
-    "    gl_Position = mvp*vec4(pos, 1.0);\n"
-    "    norm_fs = vec4(normal, 1.0);\n"
-    "    tex_fs = tex;\n"
-    "}\n";
-
-GLchar* fs_glsl =
-    "varying vec2 tex_fs;\n"
-    "varying vec4 norm_fs;\n"
-    "uniform sampler2D sampler;\n"
-    "void main() {\n"
-    "    gl_FragColor = texture2D( sampler, tex_fs );\n"
-    "}\n";
-
-// GLchar* skinned_model_vs_glsl =
+// GLchar* vs_glsl =
 //     "uniform mat4 mvp;"
-//     "uniform mat4 bones[60];\n"
 //     "attribute vec3 pos;\n"
 //     "attribute vec3 normal;\n"
 //     "attribute vec2 tex;\n"
-//     "attribute vec4 bone_weight;\n"
-//     "attribute vec4 bone_id;\n"
-//     "attribute vec4 vtangent;\n"
-//     "varying vec2 tex_coord;\n"
-//     "varying vec3 norm_fs;\n"
-//     "void main(void) {\n"
-//     "    mat4 m = bones[int(bone_id.x)] * bone_weight.x;\n"
-//     "    m += bones[int(bone_id.y)] * bone_weight.y;\n"
-//     "    m += bones[int(bone_id.z)] * bone_weight.z;\n"
-//     "    m += bones[int(bone_id.w)] * bone_weight.w;\n"
-//     "    vec4 mpos = mvp*(vec4(pos, 1.0)*m);"
-//     "    gl_Position = vec4(mpos.xyz, 1.0);\n"
-//     "    mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));\n"
-//     "    norm_fs = normal * madjtrans;\n"
-//     "    vec3 mtangent = vtangent.xyz * madjtrans; // tangent not used, just here as an example\n"
-//     "    vec3 mbitangent = cross(norm_fs, mtangent) * vtangent.w; // bitangent not used, just here as an example\n"
-//     "    tex_coord = tex;\n"
+//     "varying vec2 tex_fs;\n"
+//     "varying vec4 norm_fs;\n"
+//     "void main() {\n"
+//     "    gl_Position = mvp*vec4(pos, 1.0);\n"
+//     "    norm_fs = vec4(normal, 1.0);\n"
+//     "    tex_fs = tex;\n"
 //     "}\n";
 
-// GLchar* skinned_model_fs_glsl =
-//     "varying vec2 tex_coord;\n"
-//     "varying vec3 norm_fs;\n"
+// GLchar* fs_glsl =
+//     "varying vec2 tex_fs;\n"
+//     "varying vec4 norm_fs;\n"
 //     "uniform sampler2D sampler;\n"
 //     "void main() {\n"
-//     "    gl_FragColor = texture2D( sampler, tex_coord );\n"
+//     "    gl_FragColor = texture2D( sampler, tex_fs );\n"
 //     "}\n";
 
+GLchar* skinned_model_vs_glsl =
+    "uniform mat4 mvp;"
+    "uniform mat4 bones[60];\n"
+    "attribute vec3 pos;\n"
+    "attribute vec3 normal;\n"
+    "attribute vec2 tex;\n"
+    "attribute vec4 tangent;\n"
+    "attribute vec4 bone_id;\n"
+    "attribute vec4 bone_weight;\n"
+    "varying vec2 tex_coord;\n"
+    "varying vec3 norm_fs;\n"
+    "void main(void) {\n"
+    "    mat4 m = bones[int(bone_id.x)] * bone_weight.x;\n"
+    "        m += bones[int(bone_id.y)] * bone_weight.y;\n"
+    "        m += bones[int(bone_id.z)] * bone_weight.z;\n"
+    "        m += bones[int(bone_id.w)] * bone_weight.w;\n"
+    "    gl_Position = mvp*(m*vec4(pos, 1.0));\n"
+    "    mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));\n"
+    "    norm_fs = normal * madjtrans;\n"
+    "    vec3 mtangent = tangent.xyz * madjtrans; // tangent not used, just here as an example\n"
+    "    vec3 mbitangent = cross(norm_fs, mtangent) * tangent.w; // bitangent not used, just here as an example\n"
+    "    tex_coord = tex;\n"
+    "}\n";
+
+GLchar* skinned_model_fs_glsl =
+    "varying vec2 tex_coord;\n"
+    "varying vec3 norm_fs;\n"
+    "uniform sampler2D sampler;\n"
+    "void main() {\n"
+    "    gl_FragColor = texture2D( sampler, tex_coord );\n"
+    "}\n";
 
 
 typedef struct {
@@ -196,22 +194,13 @@ void g_initialize( int width, int height, void *data ) {
     glCullFace(GL_BACK);
 
     Program p;
-    p.vs = program_load_shader( vs_glsl, GL_VERTEX_SHADER );
-    p.fs = program_load_shader( fs_glsl, GL_FRAGMENT_SHADER );
+    p.vs = program_load_shader( skinned_model_vs_glsl, GL_VERTEX_SHADER );
+    p.fs = program_load_shader( skinned_model_fs_glsl, GL_FRAGMENT_SHADER );
     if( !p.vs || !p.fs ) g_fatal_error( "Shader compilation failed\n" );
 
-    // const char *attribs[] = { "pos", "normal", "tex", "bone_weight", "bone_id", "vtangent", 0 };
-    const char *attribs[] = { "pos", "normal", "tex", 0 };
-    if( !program_link(&p, attribs) ) g_fatal_error( "Shader link failed\n" );
-
-    p.u_mvp = glGetUniformLocation( p.object, "mvp" );
-    if( p.u_mvp == -1) g_fatal_error( "Could not bind uniform mvp\n" );
-
-    p.u_sampler = glGetUniformLocation( p.object, "sampler" );
-    if( p.u_sampler == -1) g_fatal_error( "Could not bind uniform sampler\n" );
-
-    // p.u_bones = glGetUniformLocation( p.object, "bones" );
-    // if( p.u_bones == -1) g_fatal_error( "Could not bind uniform bones\n" );
+    const char *attribs[] = { "pos", "normal", "tex", "tangent", "bone_id", "bone_weight", 0 };
+    const char *uniforms[] = { "mvp", "sampler", "bones", 0 };
+    if( !program_link(&p, attribs, uniforms) ) g_fatal_error( "Shader link failed\n" );
 
 
     fnt = tex_font_new( "dejavu16.sfn" );

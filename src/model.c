@@ -60,7 +60,7 @@ typedef struct{
   Vec loc, normal;
   Vec2 texcoord;
   Vec4 tangent;
-  unsigned char blendindex[4], blendweight[4];
+  GLubyte blendindex[4], blendweight[4];
 } Vertex;
 
 typedef struct {
@@ -84,7 +84,8 @@ struct _Model {
   GLuint vbo, ibo;
 
   // DualQuat *frame; //in iqm demo its a 3x4 matrix
-  Mat4 *frame; //in iqm demo its a 3x4 matrix
+  Mat4 *outframe; //in iqm demo its a 3x4 matrix
+  FramePose *base, *inv, *frame, *out;
 
   Vec *base_trans, *inv_trans, *frame_trans, *out_trans;
   Quat *base_rot, *inv_rot, *frame_rot, *out_rot;
@@ -155,7 +156,7 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
     mdl->anims = (Anim *)&buf[hdr->ofs_anims];
     mdl->poses = (Pose *)&buf[hdr->ofs_poses];
     // mdl->frame = g_new( DualQuat, hdr->num_joints);
-    mdl->frame = g_new( Mat4, hdr->num_joints);
+    mdl->outframe = g_new( Mat4, hdr->num_joints);
 
     mdl->frame_rot = g_new( Quat, hdr->num_frames * hdr->num_poses );
     mdl->frame_trans = g_new( Vec, hdr->num_frames * hdr->num_poses );
@@ -228,16 +229,15 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
 
 static void animate_model( Model *mdl, float curframe ) {
     if(!mdl->num_frames) return;
-    int i;
 
     int frame1 = (int)floor(curframe), frame2 = frame1 + 1;
     float frameoffset = curframe - frame1;
     frame1 = (frame1 % mdl->num_frames) * mdl->num_joints;
     frame2 = (frame2 % mdl->num_frames) * mdl->num_joints;
 
-    // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
-    // Concatenate the result with the inverse of the base pose.
-    // You would normally do animation blending and inter-frame blending here in a 3D engine.
+    // Interpolate transforms between the two closest frames and concatenate with parent transform if necessary.
+    // Animation blending and inter-frame blending  goes here...
+    int i;
     for( i = 0; i < mdl->num_joints; i++ ) {
         Vec  rv, dv1 = mdl->frame_trans[frame1+i], dv2 = mdl->frame_trans[frame2+i];
         Quat rq, dq1 = mdl->frame_rot[frame1+i],   dq2 = mdl->frame_rot[frame2+i];
@@ -252,22 +252,19 @@ static void animate_model( Model *mdl, float curframe ) {
             vec_add( &mdl->out_trans[i], &mdl->out_trans[i], &mdl->out_trans[parent] );
 
             quat_normalize( &mdl->out_rot[i], &mdl->out_rot[i] );
-            mat4_from_quat_vec( &mdl->frame[i], &mdl->out_rot[i], &mdl->out_trans[i] );
         } else {
             mdl->out_trans[i] = rv;
             mdl->out_rot[i] = rq;
-            mat4_from_quat_vec( &mdl->frame[i], &mdl->out_rot[i], &mdl->out_trans[i] );
         }
+        mat4_from_quat_vec( &mdl->outframe[i], &mdl->out_rot[i], &mdl->out_trans[i] );
     }
-
-    // The actual vertex generation based on the matrixes follows...
-    // GPU skinning here
 }
 
 //TODO: add a resource manager for this assets
 Model* model_load( const char *filename ) {
     char filepath[256];
     sprintf( filepath, "../data/models/%s", filename );
+    // g_debug_str("sizeof Vertex %d\n", sizeof(Mat4));
 
     FILE *f = fopen(filepath, "rb");
     if(!f) return NULL;
@@ -306,7 +303,7 @@ void model_destroy( Model *mdl ){
     if( mdl->tris ) g_free( mdl->tris );
     if( mdl->verts ) g_free( mdl->verts );
     if( mdl->joints ) g_free( mdl->joints );
-    if( mdl->frame ) g_free( mdl->frame );
+    if( mdl->outframe ) g_free( mdl->outframe );
     if( mdl->frame_trans ) g_free( mdl->frame_trans );
     if( mdl->frame_rot ) g_free( mdl->frame_rot );
     if( mdl->out_trans ) g_free( mdl->out_trans );
@@ -315,7 +312,6 @@ void model_destroy( Model *mdl ){
     if( mdl->textures ) g_free( mdl->textures );
     g_free( mdl );
 }
-
 
 void model_setup_buffers( Model *mdl ) {
     glGenBuffers( 1, &mdl->vbo );
@@ -337,34 +333,36 @@ void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
     glEnableVertexAttribArray( 0 ); // pos
     glEnableVertexAttribArray( 1 ); // normal
     glEnableVertexAttribArray( 2 ); // tex uv
-    // glEnableVertexAttribArray( 3 ); // bone_weight
-    // glEnableVertexAttribArray( 4 ); // bone_id
-    // glEnableVertexAttribArray( 5 ); // tangent
+    glEnableVertexAttribArray( 3 ); // tangent
+    glEnableVertexAttribArray( 4 ); // bone_id
+    glEnableVertexAttribArray( 5 ); // bone_weight
     glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)0 );
     glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)12 );
     glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)24 );
-    // glVertexAttribPointer( 3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (GLvoid *)32 );
-    // glVertexAttribPointer( 4, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(Vertex), (GLvoid *)36 );
-    // glVertexAttribPointer( 5, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)40 );
+    glVertexAttribPointer( 3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)32 );
+    glVertexAttribPointer( 4, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(Vertex), (GLvoid *)48 );
+    glVertexAttribPointer( 5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (GLvoid *)52 );
 
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
 
     glActiveTexture( GL_TEXTURE0 );
     glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
-    glUniform1i( program->u_sampler, /*GL_TEXTURE*/0);
+    glUniformMatrix4fv( program->uniforms[0], 1, GL_FALSE, mvp->m );
+    glUniform1i( program->uniforms[1], 0); //GL_TEXTURE
+    glUniformMatrix4fv( program->uniforms[2], mdl->num_joints, GL_FALSE, mdl->outframe[0].m );
 
-    glUniformMatrix4fv( program->u_mvp, 1, GL_FALSE, mvp->m );
-    // glUniformMatrix4fv( program->u_bones, mdl->num_joints, GL_FALSE, mdl->frame[0].m );
-
-    Mesh *m = &mdl->meshes[0];
-    glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, (GLvoid*)(m->first_triangle*sizeof(Triangle)) );
+    int i;
+    for( i=0; i<mdl->num_meshes; i++ ) {
+        Mesh *m = &mdl->meshes[i];
+        glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, (GLvoid*)(m->first_triangle*sizeof(Triangle)) );
+    }
 
     glDisableVertexAttribArray( 0 );
     glDisableVertexAttribArray( 1 );
     glDisableVertexAttribArray( 2 );
-    // glDisableVertexAttribArray( 3 );
-    // glDisableVertexAttribArray( 4 );
-    // glDisableVertexAttribArray( 5 );
+    glDisableVertexAttribArray( 3 );
+    glDisableVertexAttribArray( 4 );
+    glDisableVertexAttribArray( 5 );
 }
 
 #define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision

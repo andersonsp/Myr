@@ -82,14 +82,14 @@ typedef struct {
 
 typedef struct {
     GLuint vs, fs, object;
-    GLint u_mvp, u_sampler, u_bones; // uniforms
+    GLint uniforms[10];
 } Program;
 
 int texture_load( Texture *tex, const char* filename );
 TexFont* tex_font_new (char *filename);
 void tex_font_render( TexFont *fnt, char *str );
 GLuint program_load_shader( const GLchar *src, GLenum type );
-int program_link( Program *program, const char **attribs );
+int program_link( Program *program, const char **attribs, const char **uniforms );
 
 //
 // model.c

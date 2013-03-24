@@ -235,7 +235,7 @@ GLuint program_load_shader( const GLchar *src, GLenum type ) {
     return shader;
 }
 
-int program_link( Program *program, const char **attribs ) {
+int program_link( Program *program, const char **attribs, const char **uniforms ) {
     GLint linked;
 
     program->object = glCreateProgram();
@@ -261,10 +261,19 @@ int program_link( Program *program, const char **attribs ) {
             g_debug_str( "error: could not link program: %s\n", err );
             free( err );
         }
+        goto error;
+    }
 
-        glDeleteProgram( program->object );
-        return 0;
+    for( i = 0; uniforms[i] != 0; ++i ) {
+        program->uniforms[i] = glGetUniformLocation( program->object, uniforms[i] );
+        if( program->uniforms[i] == -1) {
+            g_fatal_error( "error: could not bind uniform %s\n", uniforms[i] );
+            goto error;
+        }
     }
 
     return 1;
+error:
+    glDeleteProgram( program->object );
+    return 0;
 }

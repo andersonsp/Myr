@@ -49,7 +49,7 @@ typedef struct {
   unsigned int flags;
 } Anim;
 
-enum { IQM_LOOP = 1<<0 };
+enum { ANIM_LOOP = 1<<0 };
 
 typedef struct {
   float bbmin[3], bbmax[3];
@@ -86,11 +86,7 @@ struct _Model {
   // DualQuat *frame; //in iqm demo its a 3x4 matrix
   Mat4 *outframe; //in iqm demo its a 3x4 matrix
   FramePose *base, *inv, *frame, *out;
-
-  Vec *base_trans, *inv_trans, *frame_trans, *out_trans;
-  Quat *base_rot, *inv_rot, *frame_rot, *out_rot;
 };
-
 
 static int load_meshes( Model *mdl, const char *filename, const ModelHeader *hdr, unsigned char *buf ) {
     mdl->num_meshes = hdr->num_meshes;
@@ -101,37 +97,30 @@ static int load_meshes( Model *mdl, const char *filename, const ModelHeader *hdr
     mdl->meshes = g_new( Mesh, mdl->num_meshes );
     mdl->tris = g_new( Triangle, mdl->num_tris );
     mdl->verts = g_new( Vertex, mdl->num_verts );
-    mdl->joints = g_new( Joint, mdl->num_joints );
     mdl->textures = g_new0( GLuint, mdl->num_meshes );
 
     const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
+    memcpy( mdl->verts, &buf[hdr->ofs_vertexes], (mdl->num_verts*sizeof(Vertex)) );
+    memcpy( mdl->tris, &buf[hdr->ofs_triangles], (mdl->num_tris*sizeof(Triangle)) );
+    memcpy( mdl->meshes, &buf[hdr->ofs_meshes], (mdl->num_meshes*sizeof(Mesh)) );
+
+    if( mdl->num_joints > 0 ) {
+        mdl->joints = g_new( Joint, mdl->num_joints );
+        mdl->base = g_new( FramePose, hdr->num_joints );
+        mdl->inv = g_new( FramePose, hdr->num_joints );
+        memcpy( mdl->joints, &buf[hdr->ofs_joints], (mdl->num_joints*sizeof(Joint)) );
+    }
 
     int i;
-    Vertex* verts = (Vertex *)&buf[hdr->ofs_vertexes];
-    Triangle * tris = (Triangle *) &buf[hdr->ofs_triangles];
-    Mesh* meshes = (Mesh *) &buf[hdr->ofs_meshes];
-    Joint* joints = (Joint *) &buf[hdr->ofs_joints];
-
-    for( i=0; i<mdl->num_verts; i++ ) mdl->verts[i] = verts[i];
-    for( i=0; i<mdl->num_tris; i++ ) mdl->tris[i] = tris[i];
-    for( i=0; i<mdl->num_meshes; i++ ) mdl->meshes[i] = meshes[i];
-    for( i=0; i<mdl->num_joints; i++ ) mdl->joints[i] = joints[i];
-
-    mdl->base_trans = g_new( Vec, hdr->num_joints );
-    mdl->inv_trans = g_new( Vec, hdr->num_joints );
-
-    mdl->base_rot = g_new( Quat, hdr->num_joints );
-    mdl->inv_rot = g_new( Quat, hdr->num_joints );
-
     for( i = 0; i < (int) hdr->num_joints; i++ ) {
-        Joint *j = &joints[i];
+        Joint *j = &mdl->joints[i];
         quat_normalize( &j->rotate, &j->rotate );
-        mdl->base_trans[i] = j->translate;
-        mdl->inv_rot[i] = mdl->base_rot[i] = j->rotate;
+        mdl->base[i].v = j->translate;
+        mdl->base[i].q = j->rotate;
 
-        quat_normalize( &mdl->inv_rot[i], quat_invert(&mdl->inv_rot[i], &mdl->inv_rot[i]) );
-        vec_scale( &mdl->inv_trans[i], &j->translate, -1.0 );
-        quat_vec_mul( &mdl->inv_trans[i], &mdl->inv_rot[i], &mdl->inv_trans[i] );
+        quat_normalize( &mdl->inv[i].q, quat_invert(&mdl->inv[i].q, &mdl->base[i].q) );
+        vec_scale( &mdl->inv[i].v, &j->translate, -1.0 );
+        quat_vec_mul( &mdl->inv[i].v, &mdl->inv[i].q, &mdl->inv[i].v );
     }
 
     Texture tex;
@@ -155,13 +144,10 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
     mdl->num_frames = hdr->num_frames;
     mdl->anims = (Anim *)&buf[hdr->ofs_anims];
     mdl->poses = (Pose *)&buf[hdr->ofs_poses];
+    mdl->frame = g_new( FramePose, hdr->num_frames * hdr->num_poses );
+    mdl->out = g_new( FramePose, hdr->num_joints);
     // mdl->frame = g_new( DualQuat, hdr->num_joints);
     mdl->outframe = g_new( Mat4, hdr->num_joints);
-
-    mdl->frame_rot = g_new( Quat, hdr->num_frames * hdr->num_poses );
-    mdl->frame_trans = g_new( Vec, hdr->num_frames * hdr->num_poses );
-    mdl->out_rot = g_new( Quat, hdr->num_joints);
-    mdl->out_trans = g_new( Vec, hdr->num_joints);
 
     //TODO: load bounds data
     unsigned short *framedata = (unsigned short *)&buf[hdr->ofs_frames];
@@ -171,8 +157,8 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
     for( i = 0; i < (int)hdr->num_frames; i++ ) {
         for( j = 0; j < (int)hdr->num_poses; j++ ) {
             Pose *p = &mdl->poses[j];
-            Quat rotate;
-            Vec translate;
+            Vec translate, rv, pv;
+            Quat rotate, rq;
 
             translate.x = p->channeloffset[0]; if(p->mask&0x01) translate.x += *framedata++ * p->channelscale[0];
             translate.y = p->channeloffset[1]; if(p->mask&0x02) translate.y += *framedata++ * p->channelscale[1];
@@ -192,38 +178,26 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
             int k = i*hdr->num_poses + j;
             quat_normalize( &rotate, &rotate );
-
-            Vec rv, pv;
-            Quat rq, pq;
-            quat_mul( &rq, &rotate, &mdl->inv_rot[j] );
-            quat_vec_mul( &rv, &rotate, &mdl->inv_trans[j] );
+            quat_mul( &rq, &rotate, &mdl->inv[j].q );
+            quat_vec_mul( &rv, &rotate, &mdl->inv[j].v );
             vec_add( &rv, &rv, &translate );
 
             if( p->parent >= 0) {
-                quat_mul( &pq, &mdl->base_rot[p->parent], &rq );
-                quat_vec_mul( &pv, &mdl->base_rot[p->parent], &rv );
-                vec_add( &pv, &pv, &mdl->base_trans[p->parent] );
-
-                mdl->frame_trans[k] = pv;
-                mdl->frame_rot[k] = pq;
+                quat_mul( &mdl->frame[k].q, &mdl->base[p->parent].q, &rq );
+                quat_vec_mul( &pv, &mdl->base[p->parent].q, &rv );
+                vec_add( &mdl->frame[k].v, &pv, &mdl->base[p->parent].v );
             } else {
-                mdl->frame_trans[k] = rv;
-                mdl->frame_rot[k] = rq;
+                mdl->frame[k].v = rv;
+                mdl->frame[k].q = rq;
             }
-
         }
     }
 
-    for( i = 0; i < (int)hdr->num_anims; i++ ) {
-        Anim *a = &mdl->anims[i];
-        g_debug_str("%s: loaded anim: %s\n", filename, &str[a->name]);
-    }
+    for( i = 0; i < (int)hdr->num_anims; i++ )
+        g_debug_str("%s: loaded anim: %s\n", filename, &str[mdl->anims[i].name]);
 
-    g_free( mdl->base_trans );
-    g_free( mdl->base_rot );
-    g_free( mdl->inv_trans );
-    g_free( mdl->inv_rot );
-
+    g_free( mdl->base );
+    g_free( mdl->inv );
     return 1;
 }
 
@@ -239,24 +213,24 @@ static void animate_model( Model *mdl, float curframe ) {
     // Animation blending and inter-frame blending  goes here...
     int i;
     for( i = 0; i < mdl->num_joints; i++ ) {
-        Vec  rv, dv1 = mdl->frame_trans[frame1+i], dv2 = mdl->frame_trans[frame2+i];
-        Quat rq, dq1 = mdl->frame_rot[frame1+i],   dq2 = mdl->frame_rot[frame2+i];
+        FramePose  rf, f1 = mdl->frame[frame1+i], f2 = mdl->frame[frame2+i];
+        FramePose *out = mdl->out;
 
-        vec_lerp( &rv, &dv1, &dv2, frameoffset );
-        quat_lerp( &rq, &dq1, &dq2, frameoffset );
+        vec_lerp( &rf.v, &f1.v, &f2.v, frameoffset );
+        quat_lerp( &rf.q, &f1.q, &f2.q, frameoffset );
         if( mdl->joints[i].parent >= 0) {
             int parent = mdl->joints[i].parent;
 
-            quat_mul( &mdl->out_rot[i], &mdl->out_rot[parent], &rq );
-            quat_vec_mul( &mdl->out_trans[i], &mdl->out_rot[parent], &rv );
-            vec_add( &mdl->out_trans[i], &mdl->out_trans[i], &mdl->out_trans[parent] );
+            quat_mul( &out[i].q, &out[parent].q, &rf.q );
+            quat_vec_mul( &out[i].v, &out[parent].q, &rf.v );
+            vec_add( &out[i].v, &out[i].v, &out[parent].v );
 
-            quat_normalize( &mdl->out_rot[i], &mdl->out_rot[i] );
+            quat_normalize( &mdl->out[i].q, &mdl->out[i].q );
         } else {
-            mdl->out_trans[i] = rv;
-            mdl->out_rot[i] = rq;
+            out[i].v = rf.v;
+            out[i].q = rf.q;
         }
-        mat4_from_quat_vec( &mdl->outframe[i], &mdl->out_rot[i], &mdl->out_trans[i] );
+        mat4_from_quat_vec( &mdl->outframe[i], &out[i].q, &out[i].v );
     }
 }
 
@@ -304,10 +278,8 @@ void model_destroy( Model *mdl ){
     if( mdl->verts ) g_free( mdl->verts );
     if( mdl->joints ) g_free( mdl->joints );
     if( mdl->outframe ) g_free( mdl->outframe );
-    if( mdl->frame_trans ) g_free( mdl->frame_trans );
-    if( mdl->frame_rot ) g_free( mdl->frame_rot );
-    if( mdl->out_trans ) g_free( mdl->out_trans );
-    if( mdl->out_rot ) g_free( mdl->out_rot );
+    if( mdl->frame ) g_free( mdl->frame );
+    if( mdl->out ) g_free( mdl->out );
 
     if( mdl->textures ) g_free( mdl->textures );
     g_free( mdl );

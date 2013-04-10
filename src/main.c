@@ -172,13 +172,23 @@ void g_configure( GConfig *conf ) {
     // flags : GC_MULTISAMPLING | GC_CORE_PROFILE | GC_FULLSCREEN | GC_HIDE_CURSOR | GC_VERTICAL_SYNC | GC_IGNORE_KEYREPEAT
     // gl_version
     // data
+    char* result;
+    PicolInterp *interp = picol_interp_new( 2048, 1024*16 );
+    if( picol_eval_file(interp, "../data/scripts/config.pcl") != PICOL_OK ) {
+      result = picol_get_result( interp );
+      g_fatal_error("Script error: %s \n", result);
+    }
 
-    conf->width = 800;
-    conf->height = 600;
+    int fullscreen = atoi( picol_get_var(interp, "fullscreen") );
+    conf->width = atoi( picol_get_var(interp, "width") );
+    conf->height = atoi( picol_get_var(interp, "height") );
     conf->flags = GC_IGNORE_KEYREPEAT | GC_HIDE_CURSOR;
+    if( fullscreen ) conf->flags |= GC_FULLSCREEN;
     conf->gl_version = 21;
     conf->data = NULL;
     conf->title = strdup("Land");
+
+    picol_interp_destroy( interp );
 }
 
 void g_initialize( int width, int height, void *data ) {

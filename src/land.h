@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <math.h>
 #include <GL/gl.h>
 
@@ -169,6 +170,26 @@ void object_draw( Object* self, Mat4* vp );
 Vec* object_transform( Vec* r, Vec* a, Object* o );
 Vec* object_back_transform( Vec* r, Vec* a, Object* o );
 int object_collision( Object *o, Vec* pos, Vec* dir, float radius, Vec *result );
+
+//
+// picol.c -- scripting
+//
+typedef struct _PicolInterp PicolInterp;
+typedef int (*PicolCmdFunc) ( PicolInterp *interp, int argc, char **argv, void *privdata );
+
+enum { PICOL_OK, PICOL_ERR, PICOL_RETURN, PICOL_BREAK, PICOL_CONTINUE };
+
+PicolInterp *picol_interp_new( int stack_size, int heap_size );
+void picol_interp_destroy( PicolInterp* interp );
+int picol_eval( PicolInterp *interp, char *t );
+int picol_eval_file( PicolInterp *interp, char *filename );
+
+int picol_register_command( PicolInterp *interp, char *name, PicolCmdFunc f, void *privdata );
+int picol_arity_err( PicolInterp *interp, char *name );
+
+int picol_set_var( PicolInterp *interp, char *name, char *val );
+char *picol_get_var( PicolInterp *interp, char *name );
+char *picol_get_result( PicolInterp *interp );
 
 
 // ===============================================================

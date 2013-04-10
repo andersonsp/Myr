@@ -40,7 +40,7 @@ typedef struct {
 typedef struct {
   int parent;
   unsigned int mask;
-  float channeloffset[10], channelscale[10];
+  float chan_ofs[10], chan_scale[10];
 } Pose;
 
 typedef struct {
@@ -93,7 +93,6 @@ static int load_meshes( Model *mdl, const char *filename, const ModelHeader *hdr
     mdl->num_tris = hdr->num_triangles;
     mdl->num_verts = hdr->num_vertexes;
     mdl->num_joints = hdr->num_joints;
-
     mdl->meshes = g_new( Mesh, mdl->num_meshes );
     mdl->tris = g_new( Triangle, mdl->num_tris );
     mdl->verts = g_new( Vertex, mdl->num_verts );
@@ -137,7 +136,7 @@ static int load_meshes( Model *mdl, const char *filename, const ModelHeader *hdr
 }
 
 static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr, unsigned char *buf ) {
-    if((int)hdr->num_poses != mdl->num_joints) return 0;
+    if( (int)hdr->num_poses != mdl->num_joints ) return 0;
 
     const char *str = hdr->ofs_text ? (char *)&buf[hdr->ofs_text] : "";
     mdl->num_anims = hdr->num_anims;
@@ -157,19 +156,21 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
     for( i = 0; i < (int)hdr->num_frames; i++ ) {
         for( j = 0; j < (int)hdr->num_poses; j++ ) {
             Pose *p = &mdl->poses[j];
-            Vec translate, rv, pv;
-            Quat rotate, rq;
+            Vec trans, rv, pv;
+            Quat rot, rq;
 
-            translate.x = p->channeloffset[0]; if(p->mask&0x01) translate.x += *framedata++ * p->channelscale[0];
-            translate.y = p->channeloffset[1]; if(p->mask&0x02) translate.y += *framedata++ * p->channelscale[1];
-            translate.z = p->channeloffset[2]; if(p->mask&0x04) translate.z += *framedata++ * p->channelscale[2];
+            trans = (Vec){ p->chan_ofs[0], p->chan_ofs[1], p->chan_ofs[2] };
+            if( p->mask & 0x01 ) trans.x += *framedata++ * p->chan_scale[0];
+            if( p->mask & 0x02 ) trans.y += *framedata++ * p->chan_scale[1];
+            if( p->mask & 0x04 ) trans.z += *framedata++ * p->chan_scale[2];
 
-            rotate.x = p->channeloffset[3]; if(p->mask&0x08) rotate.x += *framedata++ * p->channelscale[3];
-            rotate.y = p->channeloffset[4]; if(p->mask&0x10) rotate.y += *framedata++ * p->channelscale[4];
-            rotate.z = p->channeloffset[5]; if(p->mask&0x20) rotate.z += *framedata++ * p->channelscale[5];
-            rotate.w = p->channeloffset[6]; if(p->mask&0x40) rotate.w += *framedata++ * p->channelscale[6];
+            rot = (Quat){ p->chan_ofs[3], p->chan_ofs[4], p->chan_ofs[5], p->chan_ofs[6] };
+            if( p->mask & 0x08 ) rot.x += *framedata++ * p->chan_scale[3];
+            if( p->mask & 0x10 ) rot.y += *framedata++ * p->chan_scale[4];
+            if( p->mask & 0x20 ) rot.z += *framedata++ * p->chan_scale[5];
+            if( p->mask & 0x40 ) rot.w += *framedata++ * p->chan_scale[6];
 
-            if( p->mask&0x80 || p->mask&0x100 || p->mask&0x200 ){
+            if( (p->mask & 0x80) || (p->mask & 0x100) || (p->mask & 0x200) ) {
               g_debug_str("bone scaling is disabled...\n");
               return 0;
             }
@@ -177,10 +178,10 @@ static int load_anims( Model* mdl, const char *filename, const ModelHeader *hdr,
             // Concatenate each pose with the inverse base pose to avoid doing this at animation time.
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
             int k = i*hdr->num_poses + j;
-            quat_normalize( &rotate, &rotate );
-            quat_mul( &rq, &rotate, &mdl->inv[j].q );
-            quat_vec_mul( &rv, &rotate, &mdl->inv[j].v );
-            vec_add( &rv, &rv, &translate );
+            quat_normalize( &rot, &rot );
+            quat_mul( &rq, &rot, &mdl->inv[j].q );
+            quat_vec_mul( &rv, &rot, &mdl->inv[j].v );
+            vec_add( &rv, &rv, &trans );
 
             if( p->parent >= 0) {
                 quat_mul( &mdl->frame[k].q, &mdl->base[p->parent].q, &rq );
@@ -236,15 +237,14 @@ static void animate_model( Model *mdl, float curframe ) {
 
 //TODO: add a resource manager for this assets
 Model* model_load( const char *filename ) {
-    char filepath[256];
+    unsigned char *buf = NULL;
+    char filepath[1024];
     sprintf( filepath, "../data/models/%s", filename );
-    // g_debug_str("sizeof Vertex %d\n", sizeof(Mat4));
 
     FILE *f = fopen(filepath, "rb");
     if(!f) return NULL;
     Model* mdl = g_new0( Model, 1 );
 
-    unsigned char *buf = NULL;
     ModelHeader hdr;
     if( fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, LMESH_MAGIC, sizeof(hdr.magic)) )
         goto error;
@@ -280,7 +280,6 @@ void model_destroy( Model *mdl ){
     if( mdl->outframe ) g_free( mdl->outframe );
     if( mdl->frame ) g_free( mdl->frame );
     if( mdl->out ) g_free( mdl->out );
-
     if( mdl->textures ) g_free( mdl->textures );
     g_free( mdl );
 }
@@ -297,17 +296,14 @@ void model_setup_buffers( Model *mdl ) {
 
 //TODO: add support for normals and normal mapping
 void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
+    int i;
+    animate_model( mdl, frame );
     glUseProgram( program->object );
     glBindBuffer( GL_ARRAY_BUFFER, mdl->vbo );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
 
-    animate_model( mdl, frame );
+    for( i=0; i < 6; i++ ) glEnableVertexAttribArray( i ); // pos, normal, uv, tangent, bone_id, bone_weight
 
-    glEnableVertexAttribArray( 0 ); // pos
-    glEnableVertexAttribArray( 1 ); // normal
-    glEnableVertexAttribArray( 2 ); // tex uv
-    glEnableVertexAttribArray( 3 ); // tangent
-    glEnableVertexAttribArray( 4 ); // bone_id
-    glEnableVertexAttribArray( 5 ); // bone_weight
     glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)0 );
     glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)12 );
     glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)24 );
@@ -315,26 +311,18 @@ void model_draw( Model *mdl, Program* program, Mat4* mvp, float frame ){
     glVertexAttribPointer( 4, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(Vertex), (GLvoid *)48 );
     glVertexAttribPointer( 5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (GLvoid *)52 );
 
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, mdl->ibo );
-
     glActiveTexture( GL_TEXTURE0 );
     glBindTexture( GL_TEXTURE_2D, mdl->textures[0] );
     glUniformMatrix4fv( program->uniforms[0], 1, GL_FALSE, mvp->m );
     glUniform1i( program->uniforms[1], 0); //GL_TEXTURE
     glUniformMatrix4fv( program->uniforms[2], mdl->num_joints, GL_FALSE, mdl->outframe[0].m );
 
-    int i;
     for( i=0; i<mdl->num_meshes; i++ ) {
         Mesh *m = &mdl->meshes[i];
         glDrawElements( GL_TRIANGLES, 3*m->num_triangles, GL_UNSIGNED_INT, (GLvoid*)(m->first_triangle*sizeof(Triangle)) );
     }
 
-    glDisableVertexAttribArray( 0 );
-    glDisableVertexAttribArray( 1 );
-    glDisableVertexAttribArray( 2 );
-    glDisableVertexAttribArray( 3 );
-    glDisableVertexAttribArray( 4 );
-    glDisableVertexAttribArray( 5 );
+    for( i=0; i < 6; i++ ) glDisableVertexAttribArray( i ); // pos, normal, uv, tangent, bone_id, bone_weight
 }
 
 #define DIST_EPSILON    (0.01f)  // 2 cm epsilon for triangle collision

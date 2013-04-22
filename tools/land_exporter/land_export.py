@@ -1,5 +1,5 @@
 # This script is licensed as public domain.
-# forked from Lee Salszman LMESH exporter
+# forked from Lee Salszman IQM exporter
 
 bl_info = {
     "name": "Export Land Scenes (.land) and Models (.lmesh)",
@@ -20,16 +20,7 @@ import math
 import mathutils
 import bpy
 from bpy.props import *
-from bpy_extras.io_utils import ExportHelper
-
-LMESH_POSITION = 0
-LMESH_TEXCOORD = 1
-LMESH_NORMAL = 2
-LMESH_TANGENT = 3
-LMESH_BLENDINDEXES = 4
-LMESH_BLENDWEIGHTS = 5
-LMESH_COLOR = 6
-LMESH_CUSTOM = 0x10
+from bpy_extras.io_utils import (ExportHelper, axis_conversion)
 
 ATTR_POSITION = (1 << 0)  # 12 bytes: Vec
 ATTR_NORMAL = (1 << 1)    # 12 bytes: Vec
@@ -37,16 +28,6 @@ ATTR_TEXCOORD = (1 << 2)  # 8 bytes:  Vec2
 ATTR_TANGENT = (1 << 3)   # 16 bytes: Vec4
 ATTR_BONES = (1 << 4)     # 8 bytes: 4 indexes (0..255) and 4 weights (0..255)
 ATTR_COLOR = (1 << 5)     # 4 bytes: RGBA value
-
-LMESH_BYTE = 0
-LMESH_UBYTE = 1
-LMESH_SHORT = 2
-LMESH_USHORT = 3
-LMESH_INT = 4
-LMESH_UINT = 5
-LMESH_HALF = 6
-LMESH_FLOAT = 7
-LMESH_DOUBLE = 8
 
 LMESH_LOOP = 1
 
@@ -494,7 +475,6 @@ class LMESHFile:
 
                 if self.joints:
                     # blend indexes
-                    print('%d %d %d %d' % (v.weights[0][1], v.weights[1][1], v.weights[2][1], v.weights[3][1]))
                     file.write(struct.pack('<4B', v.weights[0][1], v.weights[1][1], v.weights[2][1], v.weights[3][1]))
 
                     # blend weights
@@ -611,7 +591,7 @@ def findArmature(context):
     return armature
 
 
-def derigifyBones(context, armature, scale):
+def derigifyBones(context, armature, scale, global_matrix):
     data = armature.data
 
     orgbones = {}
@@ -658,6 +638,8 @@ def derigifyBones(context, armature, scale):
 
     bones = {}
     worldmatrix = armature.matrix_world
+    if global_matrix is not None:
+        worldmatrix = global_matrix * worldmatrix
     worklist = [bone for bone in defbones if bone not in defparent]
     for index, bname in enumerate(worklist):
         bone = defbones[bname]
@@ -670,10 +652,13 @@ def derigifyBones(context, armature, scale):
     return bones
 
 
-def collectBones(context, armature, scale):
+def collectBones(context, armature, scale, global_matrix):
     data = armature.data
     bones = {}
     worldmatrix = armature.matrix_world
+    if global_matrix is not None:
+        worldmatrix = global_matrix * worldmatrix
+
     worklist = [bone for bone in data.bones.values() if not bone.parent]
     for index, bone in enumerate(worklist):
         bonematrix = worldmatrix * bone.matrix_local
@@ -687,7 +672,7 @@ def collectBones(context, armature, scale):
     return bones
 
 
-def collectAnim(context, armature, scale, bones, action, startframe=None, endframe=None):
+def collectAnim(context, armature, scale, bones, action, startframe=None, endframe=None, global_matrix=None):
     if not startframe or not endframe:
         startframe, endframe = action.frame_range
         startframe = int(startframe)
@@ -695,6 +680,8 @@ def collectAnim(context, armature, scale, bones, action, startframe=None, endfra
     print('Exporting action "%s" frames %d-%d' % (action.name, startframe, endframe))
     scene = context.scene
     worldmatrix = armature.matrix_world
+    if global_matrix is not None:
+        worldmatrix = global_matrix * worldmatrix
     armature.animation_data.action = action
     outdata = []
     for time in range(startframe, endframe+1):
@@ -723,7 +710,7 @@ def collectAnim(context, armature, scale, bones, action, startframe=None, endfra
     return outdata
 
 
-def collectAnims(context, armature, scale, bones, animspecs):
+def collectAnims(context, armature, scale, bones, animspecs, global_matrix):
     if not armature.animation_data:
         print('Armature has no animation data')
         return []
@@ -755,14 +742,14 @@ def collectAnims(context, armature, scale, bones, animspecs):
             flags = int(animspec[4])
         except:
             flags = 0
-        framedata = collectAnim(context, armature, scale, bones, actions[animname], startframe, endframe)
+        framedata = collectAnim(context, armature, scale, bones, actions[animname], startframe, endframe, global_matrix)
         anims.append(Animation(animname, framedata, fps, flags))
     armature.animation_data.action = oldaction
     scene.frame_set(oldframe)
     return anims
 
 
-def collectMeshes(context, bones, scale, matfun, useskel=True, usecol=False):
+def collectMeshes(context, bones, scale, matfun, useskel=True, usecol=False, global_matrix=None):
     vertwarn = []
     objs = context.selected_objects  # context.scene.objects
     meshes = []
@@ -772,6 +759,8 @@ def collectMeshes(context, bones, scale, matfun, useskel=True, usecol=False):
             if not data.tessfaces:
                 continue
             coordmatrix = obj.matrix_world
+            if global_matrix is not None:
+                coordmatrix = global_matrix * coordmatrix
             normalmatrix = coordmatrix.inverted().transposed()
             if scale != 1.0:
                 coordmatrix = mathutils.Matrix.Scale(scale, 4) * coordmatrix
@@ -909,7 +898,7 @@ def collectMeshes(context, bones, scale, matfun, useskel=True, usecol=False):
     return meshes
 
 
-def exportLMESH(context, filename, usemesh=True, useskel=True, usebbox=True, usecol=False, scale=1.0, animspecs=None, matfun=(lambda prefix, image: image), derigify=False):
+def exportLMESH(context, filename, usemesh=True, useskel=True, usebbox=True, usecol=False, scale=1.0, animspecs=None, matfun=(lambda prefix, image: image), derigify=False, global_matrix=None):
     armature = findArmature(context)
     if useskel and not armature:
         print('No armature selected')
@@ -921,18 +910,18 @@ def exportLMESH(context, filename, usemesh=True, useskel=True, usebbox=True, use
 
     if useskel:
         if derigify:
-            bones = derigifyBones(context, armature, scale)
+            bones = derigifyBones(context, armature, scale, global_matrix)
         else:
-            bones = collectBones(context, armature, scale)
+            bones = collectBones(context, armature, scale, global_matrix)
     else:
         bones = {}
     bonelist = sorted(bones.values(), key=lambda bone: bone.index)
     if usemesh:
-        meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol)
+        meshes = collectMeshes(context, bones, scale, matfun, useskel, usecol, global_matrix)
     else:
         meshes = []
     if useskel and animspecs:
-        anims = collectAnims(context, armature, scale, bonelist, animspecs)
+        anims = collectAnims(context, armature, scale, bonelist, animspecs, global_matrix)
     else:
         anims = []
 
@@ -974,6 +963,30 @@ class ExportLMESH(bpy.types.Operator, ExportHelper):
     matfmt = EnumProperty(name="Materials", description="Material name format", items=[("m+i-e", "material+image-ext", ""), ("m", "material", ""), ("i", "image", "")], default="i")
     derigify = BoolProperty(name="De-rigify", description="Export only deformation bones from rigify", default=False)
 
+    axis_forward = EnumProperty(
+        name="Forward",
+        items=(('X', "X Forward", ""),
+               ('Y', "Y Forward", ""),
+               ('Z', "Z Forward", ""),
+               ('-X', "-X Forward", ""),
+               ('-Y', "-Y Forward", ""),
+               ('-Z', "-Z Forward", ""),
+               ),
+        default='-Z',
+    )
+
+    axis_up = EnumProperty(
+        name="Up",
+        items=(('X', "X Up", ""),
+               ('Y', "Y Up", ""),
+               ('Z', "Z Up", ""),
+               ('-X', "-X Up", ""),
+               ('-Y', "-Y Up", ""),
+               ('-Z', "-Z Up", ""),
+               ),
+        default='Y',
+    )
+
     def execute(self, context):
         if self.properties.matfmt == "m+i-e":
             matfun = lambda prefix, image: prefix + os.path.splitext(image)[0]
@@ -981,7 +994,13 @@ class ExportLMESH(bpy.types.Operator, ExportHelper):
             matfun = lambda prefix, image: prefix
         else:
             matfun = lambda prefix, image: image
-        exportLMESH(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel, self.properties.usebbox, self.properties.usecol, self.properties.usescale, self.properties.animspec, matfun, self.properties.derigify)
+
+        global_matrix = axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
+
+        exportLMESH(context, self.properties.filepath, self.properties.usemesh, self.properties.useskel,
+                    self.properties.usebbox, self.properties.usecol, self.properties.usescale, self.properties.animspec,
+                    matfun, self.properties.derigify, global_matrix
+                    )
         return {'FINISHED'}
 
     def check(self, context):
